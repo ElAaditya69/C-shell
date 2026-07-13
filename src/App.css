@@ -1,0 +1,438 @@
+/* ===== C-SHELL PROFESSIONAL RETRO THEME ===== */
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-panel: #1a1a2e;
+  --bg-hover: #252540;
+  --text-primary: #ffb000;
+  --text-secondary: #ffcc44;
+  --text-dim: #886600;
+  --text-bright: #ffdd66;
+  --accent: #ff6b35;
+  --success: #00ff88;
+  --error: #ff3333;
+  --border: #2a2a3e;
+  --glow: 0 0 10px rgba(255, 176, 0, 0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Courier New', 'Fira Code', monospace;
+  overflow: hidden;
+}
+
+/* ===== TITLE BAR ===== */
+.titlebar {
+  background: linear-gradient(180deg, #1a1a2e 0%, #12121a 100%);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--border);
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--text-primary);
+  text-shadow: var(--glow);
+}
+
+.subtitle {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ===== MAIN LAYOUT ===== */
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ===== FILE TREE ===== */
+.file-tree {
+  width: 220px;
+  background: var(--bg-secondary);
+  border-right: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.file-tree-header {
+  padding: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.file-tree-actions {
+  padding: 8px;
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.action-btn {
+  flex: 1;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-primary);
+}
+
+.file-tree-path {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.empty-state {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.empty-state p {
+  margin: 4px 0;
+}
+
+.file-item {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: all 0.2s;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-item:hover {
+  background: rgba(255, 176, 0, 0.1);
+  color: var(--text-primary);
+}
+
+.file-item.active {
+  background: rgba(255, 176, 0, 0.2);
+  color: var(--text-primary);
+  border-left: 3px solid var(--text-primary);
+}
+
+.file-icon {
+  font-size: 14px;
+}
+
+.file-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delete-btn {
+  opacity: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.file-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  background: rgba(255, 51, 51, 0.3);
+}
+
+/* ===== EDITOR PANEL ===== */
+.editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+/* ===== TOOLBAR ===== */
+.toolbar {
+  background: var(--bg-panel);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--border);
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.run-btn {
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.run-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
+}
+
+.run-btn.running {
+  background: linear-gradient(135deg, #666 0%, #888 100%);
+  cursor: not-allowed;
+}
+
+.run-btn:disabled {
+  opacity: 0.7;
+}
+
+.tool-btn {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tool-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-primary);
+}
+
+.file-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.badge {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+/* ===== EDITOR ===== */
+.editor-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tab-bar {
+  background: var(--bg-secondary);
+  padding: 0 16px;
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+  background: rgba(255, 176, 0, 0.05);
+}
+
+.unsaved {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.editor-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.editor-container .cm-editor {
+  height: 100%;
+  background: var(--bg-primary) !important;
+}
+
+.editor-container .cm-gutters {
+  background: var(--bg-secondary) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+.editor-container .cm-activeLineGutter {
+  background: rgba(255, 176, 0, 0.1) !important;
+}
+
+/* ===== TERMINAL ===== */
+.terminal-panel {
+  height: 200px;
+  background: var(--bg-primary);
+  border-top: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-header {
+  background: var(--bg-panel);
+  padding: 6px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-title {
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.terminal-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.term-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: block;
+}
+
+.term-btn.close { background: #ff5f56; }
+.term-btn.minimize { background: #ffbd2e; }
+.term-btn.maximize { background: #27c93f; }
+
+.terminal-body {
+  flex: 1;
+  padding: 12px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.terminal-body pre {
+  color: var(--text-primary);
+  font-family: inherit;
+  white-space: pre-wrap;
+}
+
+/* ===== STATUS BAR ===== */
+.statusbar {
+  background: var(--bg-panel);
+  padding: 6px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 2px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* ===== SCANLINES EFFECT ===== */
+.app::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.03),
+    rgba(0, 0, 0, 0.03) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
