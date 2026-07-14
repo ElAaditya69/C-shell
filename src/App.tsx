@@ -55,8 +55,9 @@ function App() {
   };
 
   const newFile = async () => {
-    const filename = prompt('Enter filename (e.g., hello.c):', 'untitled.c');
-    if (!filename) return;
+  console.log("NEW BUTTON CLICKED");
+  alert("New button works!");
+
     
     const path = `/Users/mac/Desktop/${filename}`;
     try {
@@ -71,10 +72,9 @@ function App() {
   };
 
   const openFolder = async () => {
-    const folder = prompt('Enter folder path:', '/Users/mac/Desktop');
-    if (folder) {
-      loadDirectory(folder);
-    }
+  console.log("OPEN BUTTON CLICKED");
+  alert("Open button works!");
+
   };
 
   const deleteFile = async (path: string) => {
