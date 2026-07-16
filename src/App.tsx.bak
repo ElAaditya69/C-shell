@@ -31,26 +31,17 @@ function App() {
   }, [loadDirectory]);
 
   const openFile = async (path: string) => {
-  alert("openFile() called!");
+    try {
+      const content = await FileService.readFile(path);
+      setCode(content as string);
+      setCurrentFile(path);
+      setOutput(prev => prev + `\nOpened: ${path}\n`);
+    } catch (e) {
+      setOutput(prev => prev + `\nError reading file: ${e}\n`);
+    }
+  };
 
-  console.log(path);
-
-  try {
-    const content = await FileService.readFile(path);
-
-    alert("File read successfully!");
-
-    setCode(content);
-    setCurrentFile(path);
-
-    setOutput(prev => prev + `\nOpened: ${path}\n`);
-  } catch (e) {
-    alert(`ERROR:\n${e}`);
-    console.error(e);
-  }
-};
-
-const saveFile = async () => {
+  const saveFile = async () => {
     try {
       let filePath = currentFile;
 
@@ -115,30 +106,7 @@ int main() {
 
  
 
-
-  const openSingleFile = async () => {
-    try {
-      const file = await FileService.openFileDialog();
-
-      if (!file) {
-        setOutput(prev => prev + "\n📄 Open cancelled.\n");
-        return;
-      }
-
-      await openFile(file);
-
-      const dir = file.substring(0, file.lastIndexOf("/"));
-      await loadDirectory(dir);
-      setCurrentDir(dir);
-
-      setOutput(prev => prev + `\n📄 Opened: ${file}\n`);
-    } catch (e) {
-      setOutput(prev => prev + `\n❌ ${e}\n`);
-    }
-  };
-
   const deleteFile = async (path: string) => {
-
     if (confirm(`Delete ${path.split('/').pop()}?`)) {
       try {
         await FileService.deleteFile(path);
@@ -210,15 +178,14 @@ const runCode = async () => {
         />
         
         <div className="editor-panel">
-         <Toolbar
-  onRun={runCode}
-  onSave={saveFile}
-  onNew={newFile}
-  onOpenFolder={openFolder}
-  onOpenFile={openSingleFile}
-  isRunning={isRunning}
-  currentFile={currentFile}
-/>
+          <Toolbar 
+            onRun={runCode} 
+            onSave={saveFile}
+            onNew={newFile}
+            onOpenFolder={openFolder}
+            isRunning={isRunning}
+            currentFile={currentFile}
+          />
           
           <div className="editor-wrapper">
             <div className="tab-bar">

@@ -8,34 +8,49 @@ interface FileTreeProps {
   onDeleteFile: (path: string) => void;
 }
 
-export function FileTree({ 
-  files, 
-  currentFile, 
+export function FileTree({
+  files,
+  currentFile,
   currentDir,
-  onFileSelect, 
+  onFileSelect,
   onNewFile,
   onOpenFolder,
-  onDeleteFile 
+  onDeleteFile,
 }: FileTreeProps) {
   return (
-    <div className="file-tree">
+    <div
+      className="file-tree"
+      onClickCapture={() => {
+        console.log("FILE TREE CLICK");
+        alert("FILE TREE CLICK");
+      }}
+    >
       <div className="file-tree-header">
         <span>📂 EXPLORER</span>
       </div>
-      
+
       <div className="file-tree-actions">
-        <button className="action-btn" onClick={onNewFile} title="New File (Ctrl+N)">
+        <button
+          className="action-btn"
+          onClick={onNewFile}
+          title="New File (Ctrl+N)"
+        >
           📝 New
         </button>
-        <button className="action-btn" onClick={onOpenFolder} title="Open Folder (Ctrl+O)">
+
+        <button
+          className="action-btn"
+          onClick={onOpenFolder}
+          title="Open Folder (Ctrl+O)"
+        >
           📁 Open
         </button>
       </div>
-      
+
       <div className="file-tree-path">
-        {currentDir.split('/').pop() || 'Desktop'}
+        {currentDir.split("/").pop() || "Desktop"}
       </div>
-      
+
       <div className="file-list">
         {files.length === 0 ? (
           <div className="empty-state">
@@ -44,18 +59,26 @@ export function FileTree({
           </div>
         ) : (
           files.map((file) => {
-            const filename = file.split('/').pop() || file;
+            const filename = file.split("/").pop() || file;
             const isActive = currentFile === file;
-            
+
             return (
               <div
                 key={file}
-                className={`file-item ${isActive ? 'active' : ''}`}
-                onClick={() => onFileSelect(file)}
+                className={`file-item ${isActive ? "active" : ""}`}
+                onClick={() => {
+                  console.log("Clicked:", file);
+                  alert(file);
+                  onFileSelect(file);
+                }}
               >
                 <span className="file-icon">📄</span>
-                <span className="file-name">{filename}</span>
-                <button 
+
+                <span className="file-name">
+                  {filename}
+                </span>
+
+                <button
                   className="delete-btn"
                   onClick={(e) => {
                     e.stopPropagation();
