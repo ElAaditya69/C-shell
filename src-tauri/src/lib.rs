@@ -1,6 +1,6 @@
 
 mod commands;
-mod process;
+mod terminal;
 
 use commands::*;
 
@@ -16,7 +16,10 @@ pub fn run() {
             write_file,
             list_directory,
             create_file,
-            delete_file
+            delete_file,
+            start_terminal,
+            send_command,
+            read_output
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

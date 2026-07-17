@@ -31,6 +31,17 @@ function App() {
     loadDirectory('/Users/mac/Desktop');
   }, [loadDirectory]);
 
+  useEffect(() => {
+  (async () => {
+    try {
+      await FileService.startTerminal();
+      await FileService.sendCommand("pwd");
+    } catch (e) {
+      console.error(e);
+    }
+  })();
+}, []);
+
   const openFile = async (path: string) => {
   alert("openFile() called!");
 

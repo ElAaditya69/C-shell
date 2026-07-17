@@ -56,4 +56,16 @@ export class FileService {
       multiple: false,
     }) as string | null;
   }
+
+  static async startTerminal(): Promise<void> {
+    await invoke("start_terminal");
+  }
+
+  static async sendCommand(command: string): Promise<void> {
+    await invoke("send_command", { command });
+  }
+
+  static async readOutput(): Promise<string> {
+    return await invoke("read_output");
+  }
 }
