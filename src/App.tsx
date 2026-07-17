@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { FileService } from './services/FileService';
-import { Editor } from './components/Editor';
-import { Terminal } from './components/Terminal';
-import { Toolbar } from './components/Toolbar';
-import { FileTree } from './components/FileTree';
+import { CompileService } from './services/CompileService';
+import { Editor } from './components/editor/Editor';
+import { Terminal } from './components/terminal/Terminal';
+import { Toolbar } from './components/toolbar/Toolbar';
+import { FileTree } from './components/sidebar/FileTree';
 import './App.css';
 
 function App() {
@@ -14,6 +14,7 @@ function App() {
   const [currentFile, setCurrentFile] = useState<string | null>(null);
   const [files, setFiles] = useState<string[]>([]);
   const [currentDir, setCurrentDir] = useState('');
+
 
   const loadDirectory = useCallback(async (dir: string) => {
     try {
@@ -163,12 +164,8 @@ const runCode = async () => {
   setIsRunning(true);
 
   try {
-    const result = await invoke("compile_and_run", {
-      code,
-      filename: currentFile,
-    });
-
-    setOutput(result as string);
+    const result = await CompileService.compileAndRun(code, currentFile);
+    setOutput(result);
   } catch (error) {
     setOutput(`❌ ${error}`);
   }
