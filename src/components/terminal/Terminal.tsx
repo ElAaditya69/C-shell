@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
+import { FileService } from "../../services/FileService";
 
 import "xterm/css/xterm.css";
 
@@ -39,6 +40,31 @@ export function Terminal({ output }: TerminalProps) {
     term.writeln("");
 
     xtermRef.current = term;
+
+    term.onData(async (data) => {
+      try {
+        await FileService.sendCommand(data);
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    const readLoop = async () => {
+      while (true) {
+        try {
+          const out = await FileService.readOutput();
+
+          if (out) {
+            term.write(out);
+          }
+        } catch (e) {
+          console.error(e);
+          break;
+        }
+      }
+    };
+
+    readLoop();
 
     const resize = () => fitAddon.fit();
 
