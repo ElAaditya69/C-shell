@@ -1,13 +1,13 @@
-use crate::terminal::pty::PtyManager;
+use crate::terminal::engine::TerminalEngine;
 use std::sync::{Mutex, OnceLock};
 use tauri::command;
 
-static TERMINAL: OnceLock<Mutex<PtyManager>> = OnceLock::new();
+static TERMINAL: OnceLock<Mutex<TerminalEngine>> = OnceLock::new();
 
 #[command]
 pub fn start_terminal() -> Result<(), String> {
     TERMINAL
-        .set(Mutex::new(PtyManager::new()?))
+        .set(Mutex::new(TerminalEngine::new()?))
         .map_err(|_| "Terminal already started".to_string())?;
 
     Ok(())
@@ -19,9 +19,7 @@ pub fn send_command(command: String) -> Result<(), String> {
         .get()
         .ok_or("Terminal not started")?;
 
-    let mut terminal = terminal.lock().unwrap();
-
-    terminal.send(&command)
+    terminal.lock().unwrap().send(&command)
 }
 
 #[command]
@@ -30,10 +28,5 @@ pub fn read_output() -> Result<String, String> {
         .get()
         .ok_or("Terminal not started")?;
 
-    let mut terminal = terminal.lock().unwrap();
-
-   terminal.read_line().map(|line| {
-    println!("OUTPUT: {}", line);
-    line
-})
+    terminal.lock().unwrap().read()
 }

@@ -35,13 +35,9 @@ impl PtyManager {
         Ok(Self { reader, writer })
     }
 
-    pub fn send(&mut self, command: &str) -> Result<(), String> {
+    pub fn send(&mut self, data: &str) -> Result<(), String> {
         self.writer
-            .write_all(command.as_bytes())
-            .map_err(|e| e.to_string())?;
-
-        self.writer
-            .write_all(b"\n")
+            .write_all(data.as_bytes())
             .map_err(|e| e.to_string())?;
 
         self.writer.flush().map_err(|e| e.to_string())
