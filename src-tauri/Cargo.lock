@@ -203,6 +203,8 @@ dependencies = [
 name = "c-shell"
 version = "0.2.0"
 dependencies = [
+ "crossbeam-channel",
+ "parking_lot",
  "portable-pty",
  "serde",
  "serde_json",

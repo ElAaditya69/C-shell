@@ -11,8 +11,8 @@ impl TerminalEngine {
         })
     }
 
-    pub fn send(&mut self, command: &str) -> Result<(), String> {
-        self.pty.send(command)
+    pub fn send(&mut self, input: &str) -> Result<(), String> {
+        self.pty.send(input)
     }
 
     pub fn read(&mut self) -> Result<String, String> {
