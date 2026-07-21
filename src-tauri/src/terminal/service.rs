@@ -11,11 +11,11 @@ impl TerminalService {
         })
     }
 
-    pub fn send(&mut self, input: &str) -> Result<(), String> {
-        self.engine.send(input)
+    pub fn send_command(&mut self, command: &str) -> Result<(), String> {
+        self.engine.send(command)
     }
 
-    pub fn read(&mut self) -> Result<String, String> {
+    pub fn read_output(&mut self) -> Result<String, String> {
         self.engine.read()
     }
 }

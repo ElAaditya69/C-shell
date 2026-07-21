@@ -35,7 +35,7 @@ function App() {
   (async () => {
     try {
       await FileService.startTerminal();
-      await FileService.sendCommand("pwd");
+      await FileService.sendCommand("pwd\n");
     } catch (e) {
       console.error(e);
     }
@@ -244,7 +244,7 @@ const runCode = async () => {
             />
           </div>
           
-          <Terminal output={output} />
+          <Terminal />
         </div>
       </div>
       

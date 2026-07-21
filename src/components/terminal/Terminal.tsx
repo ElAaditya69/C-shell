@@ -5,11 +5,7 @@ import { FileService } from "../../services/FileService";
 
 import "xterm/css/xterm.css";
 
-interface TerminalProps {
-  output: string;
-}
-
-export function Terminal({ output }: TerminalProps) {
+export function Terminal() {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
 
@@ -76,17 +72,7 @@ export function Terminal({ output }: TerminalProps) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!xtermRef.current) return;
 
-    xtermRef.current.clear();
-
-    if (output.trim() === "") {
-      xtermRef.current.writeln("$ Ready to compile...");
-    } else {
-      xtermRef.current.write(output.replace(/\n/g, "\r\n"));
-    }
-  }, [output]);
 
   return (
     <div className="terminal-panel">

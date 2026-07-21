@@ -1,21 +1,21 @@
-use super::pty::PtyManager;
+use super::session::TerminalSession;
 
 pub struct TerminalEngine {
-    pty: PtyManager,
+    session: TerminalSession,
 }
 
 impl TerminalEngine {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
-            pty: PtyManager::new()?,
+            session: TerminalSession::new()?,
         })
     }
 
     pub fn send(&mut self, input: &str) -> Result<(), String> {
-        self.pty.send(input)
+        self.session.send(input)
     }
 
     pub fn read(&mut self) -> Result<String, String> {
-        self.pty.read_line()
+        self.session.read()
     }
 }

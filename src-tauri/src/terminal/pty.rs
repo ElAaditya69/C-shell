@@ -1,9 +1,13 @@
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use std::io::{Read, Write};
+use std::{
+    io::{Read, Write},
+    sync::{Arc, Mutex},
+    thread,
+};
 
 pub struct PtyManager {
-    writer: Box<dyn Write + Send>,
-    reader: Box<dyn Read + Send>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    output: Arc<Mutex<String>>,
 }
 
 impl PtyManager {
@@ -25,32 +29,64 @@ impl PtyManager {
             .spawn_command(cmd)
             .map_err(|e| e.to_string())?;
 
-        let reader = pair
+        let mut reader = pair
             .master
             .try_clone_reader()
             .map_err(|e| e.to_string())?;
 
-        let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|e| e.to_string())?;
 
-        Ok(Self { reader, writer })
+        let output = Arc::new(Mutex::new(String::new()));
+
+        let output_clone = output.clone();
+
+        thread::spawn(move || {
+            let mut buffer = [0u8; 4096];
+
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => break,
+
+                    Ok(size) => {
+                        let text =
+                            String::from_utf8_lossy(&buffer[..size]).to_string();
+
+                        let mut out = output_clone.lock().unwrap();
+
+                        out.push_str(&text);
+                    }
+
+                    Err(_) => break,
+                }
+            }
+        });
+
+        Ok(Self {
+            writer: Arc::new(Mutex::new(writer)),
+            output,
+        })
     }
 
     pub fn send(&mut self, data: &str) -> Result<(), String> {
-        self.writer
+        let mut writer = self.writer.lock().unwrap();
+
+        writer
             .write_all(data.as_bytes())
             .map_err(|e| e.to_string())?;
 
-        self.writer.flush().map_err(|e| e.to_string())
+        writer.flush().map_err(|e| e.to_string())
     }
 
     pub fn read_line(&mut self) -> Result<String, String> {
-        let mut buffer = [0u8; 4096];
+        let mut output = self.output.lock().unwrap();
 
-        let size = self
-            .reader
-            .read(&mut buffer)
-            .map_err(|e| e.to_string())?;
+        let text = output.clone();
 
-        Ok(String::from_utf8_lossy(&buffer[..size]).to_string())
+        output.clear();
+
+        Ok(text)
     }
 }
