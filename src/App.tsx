@@ -158,17 +158,17 @@ int main() {
 
 const runCode = async () => {
   if (!currentFile) {
-    setOutput(prev => prev + "\n❌ Please save the file first!\n");
+    alert("Please save the file first!");
     return;
   }
 
   setIsRunning(true);
 
   try {
-    const result = await CompileService.compileAndRun(code, currentFile);
-    setOutput(result);
+    // Output now streams straight into the terminal panel below.
+    await CompileService.compileAndRun(code, currentFile);
   } catch (error) {
-    setOutput(`❌ ${error}`);
+    alert(`Failed to run: ${error}`);
   }
 
   setIsRunning(false);
