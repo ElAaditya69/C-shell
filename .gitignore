@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 src-tauri/target
 *.zip
+CHATGPT_HANDOFF.md
