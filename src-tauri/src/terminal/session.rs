@@ -1,21 +1,22 @@
 use super::pty::PtyManager;
+use tauri::AppHandle;
 
 pub struct TerminalSession {
     pty: PtyManager,
 }
 
 impl TerminalSession {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(app: AppHandle) -> Result<Self, String> {
         Ok(Self {
-            pty: PtyManager::new()?,
+            pty: PtyManager::new(app)?,
         })
     }
 
-    pub fn send(&mut self, input: &str) -> Result<(), String> {
+    pub fn send(&self, input: &str) -> Result<(), String> {
         self.pty.send(input)
     }
 
-    pub fn read(&mut self) -> Result<String, String> {
-        self.pty.read_line()
+    pub fn resize(&self, rows: u16, cols: u16) -> Result<(), String> {
+        self.pty.resize(rows, cols)
     }
 }

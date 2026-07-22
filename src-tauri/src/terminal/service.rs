@@ -1,21 +1,22 @@
 use super::engine::TerminalEngine;
+use tauri::AppHandle;
 
 pub struct TerminalService {
     engine: TerminalEngine,
 }
 
 impl TerminalService {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(app: AppHandle) -> Result<Self, String> {
         Ok(Self {
-            engine: TerminalEngine::new()?,
+            engine: TerminalEngine::new(app)?,
         })
     }
 
-    pub fn send_command(&mut self, command: &str) -> Result<(), String> {
+    pub fn send_command(&self, command: &str) -> Result<(), String> {
         self.engine.send(command)
     }
 
-    pub fn read_output(&mut self) -> Result<String, String> {
-        self.engine.read()
+    pub fn resize(&self, rows: u16, cols: u16) -> Result<(), String> {
+        self.engine.resize(rows, cols)
     }
 }

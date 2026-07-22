@@ -1,17 +1,20 @@
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use std::{
     io::{Read, Write},
     sync::{Arc, Mutex},
     thread,
 };
+use tauri::{AppHandle, Emitter};
+
+use super::events::TERMINAL_OUTPUT_EVENT;
 
 pub struct PtyManager {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    output: Arc<Mutex<String>>,
+    master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
 }
 
 impl PtyManager {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(app: AppHandle) -> Result<Self, String> {
         let pty_system = native_pty_system();
 
         let pair = pty_system
@@ -23,7 +26,8 @@ impl PtyManager {
             })
             .map_err(|e| e.to_string())?;
 
-        let cmd = CommandBuilder::new("/bin/zsh");
+        let mut cmd = CommandBuilder::new("/bin/zsh");
+        cmd.arg("-l"); // login shell, so it behaves like a real terminal (.zprofile etc.)
 
         pair.slave
             .spawn_command(cmd)
@@ -39,26 +43,24 @@ impl PtyManager {
             .take_writer()
             .map_err(|e| e.to_string())?;
 
-        let output = Arc::new(Mutex::new(String::new()));
+        let master = Arc::new(Mutex::new(pair.master));
 
-        let output_clone = output.clone();
-
+        // Push output to the frontend as it arrives, instead of buffering
+        // it for the frontend to poll for.
         thread::spawn(move || {
             let mut buffer = [0u8; 4096];
 
             loop {
                 match reader.read(&mut buffer) {
-                    Ok(0) => break,
-
+                    Ok(0) => break, // shell exited / pty closed
                     Ok(size) => {
-                        let text =
-                            String::from_utf8_lossy(&buffer[..size]).to_string();
-
-                        let mut out = output_clone.lock().unwrap();
-
-                        out.push_str(&text);
+                        let text = String::from_utf8_lossy(&buffer[..size]).to_string();
+                        // If emit fails (e.g. window already closed), just stop —
+                        // there's no frontend left to receive it.
+                        if app.emit(TERMINAL_OUTPUT_EVENT, text).is_err() {
+                            break;
+                        }
                     }
-
                     Err(_) => break,
                 }
             }
@@ -66,27 +68,26 @@ impl PtyManager {
 
         Ok(Self {
             writer: Arc::new(Mutex::new(writer)),
-            output,
+            master,
         })
     }
 
-    pub fn send(&mut self, data: &str) -> Result<(), String> {
+    pub fn send(&self, data: &str) -> Result<(), String> {
         let mut writer = self.writer.lock().unwrap();
-
-        writer
-            .write_all(data.as_bytes())
-            .map_err(|e| e.to_string())?;
-
+        writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
         writer.flush().map_err(|e| e.to_string())
     }
 
-    pub fn read_line(&mut self) -> Result<String, String> {
-        let mut output = self.output.lock().unwrap();
-
-        let text = output.clone();
-
-        output.clear();
-
-        Ok(text)
+    pub fn resize(&self, rows: u16, cols: u16) -> Result<(), String> {
+        self.master
+            .lock()
+            .unwrap()
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| e.to_string())
     }
 }

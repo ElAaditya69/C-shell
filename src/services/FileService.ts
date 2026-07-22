@@ -57,7 +57,7 @@ export class FileService {
     }) as string | null;
   }
 
-  static async startTerminal(): Promise<void> {
+static async startTerminal(): Promise<void> {
     await invoke("start_terminal");
   }
 
@@ -65,7 +65,7 @@ export class FileService {
     await invoke("send_command", { command });
   }
 
-  static async readOutput(): Promise<string> {
-    return await invoke("read_output");
+  static async resizeTerminal(rows: number, cols: number): Promise<void> {
+    await invoke("resize_terminal", { rows, cols });
   }
 }

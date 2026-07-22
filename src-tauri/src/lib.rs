@@ -19,7 +19,7 @@ pub fn run() {
             delete_file,
             start_terminal,
             send_command,
-            read_output
+            resize_terminal
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

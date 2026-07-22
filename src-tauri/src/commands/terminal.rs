@@ -1,51 +1,24 @@
-use crate::terminal::{
-    events::TERMINAL_OUTPUT_EVENT,
-    service::TerminalService,
-};
+use crate::terminal::service::TerminalService;
 use std::sync::{Mutex, OnceLock};
-use tauri::command;
+use tauri::{command, AppHandle};
 
 static TERMINAL: OnceLock<Mutex<TerminalService>> = OnceLock::new();
 
 #[command]
-pub fn start_terminal() -> Result<(), String> {
-    println!("Event channel ready: {}", TERMINAL_OUTPUT_EVENT);
-
+pub fn start_terminal(app: AppHandle) -> Result<(), String> {
     TERMINAL
-        .set(Mutex::new(TerminalService::new()?))
-        .map_err(|_| "Terminal already started".to_string())?;
-
-    Ok(())
+        .set(Mutex::new(TerminalService::new(app)?))
+        .map_err(|_| "Terminal already started".to_string())
 }
 
 #[command]
 pub fn send_command(command: String) -> Result<(), String> {
-    println!("COMMAND RECEIVED: {:?}", command);
-
-    let terminal = TERMINAL
-        .get()
-        .ok_or("Terminal not started")?;
-
-    terminal
-        .lock()
-        .unwrap()
-        .send_command(&command)
+    let terminal = TERMINAL.get().ok_or("Terminal not started")?;
+    terminal.lock().unwrap().send_command(&command)
 }
 
 #[command]
-pub fn read_output() -> Result<String, String> {
-    let terminal = TERMINAL
-        .get()
-        .ok_or("Terminal not started")?;
-
-    let output = terminal
-        .lock()
-        .unwrap()
-        .read_output()?;
-
-    if !output.is_empty() {
-        println!("PTY OUTPUT: {:?}", output);
-    }
-
-    Ok(output)
+pub fn resize_terminal(rows: u16, cols: u16) -> Result<(), String> {
+    let terminal = TERMINAL.get().ok_or("Terminal not started")?;
+    terminal.lock().unwrap().resize(rows, cols)
 }

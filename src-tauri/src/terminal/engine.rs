@@ -1,21 +1,22 @@
 use super::session::TerminalSession;
+use tauri::AppHandle;
 
 pub struct TerminalEngine {
     session: TerminalSession,
 }
 
 impl TerminalEngine {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(app: AppHandle) -> Result<Self, String> {
         Ok(Self {
-            session: TerminalSession::new()?,
+            session: TerminalSession::new(app)?,
         })
     }
 
-    pub fn send(&mut self, input: &str) -> Result<(), String> {
+    pub fn send(&self, input: &str) -> Result<(), String> {
         self.session.send(input)
     }
 
-    pub fn read(&mut self) -> Result<String, String> {
-        self.session.read()
+    pub fn resize(&self, rows: u16, cols: u16) -> Result<(), String> {
+        self.session.resize(rows, cols)
     }
 }
