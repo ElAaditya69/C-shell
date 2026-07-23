@@ -1,4 +1,5 @@
-use crate::terminal::events::TERMINAL_OUTPUT_EVENT;
+use super::terminal::send_to_terminal;
+use crate::terminal::events::{TERMINAL_FOCUS_EVENT, TERMINAL_OUTPUT_EVENT};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -9,12 +10,6 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
     let temp_dir = std::env::temp_dir().join("c-shell");
     fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
 
-    // `filename` is usually a full path like /Users/you/Desktop/foo.c.
-    // Path::join() discards the base when given an absolute path, so
-    // joining it onto temp_dir would silently give back the ORIGINAL
-    // file — and deleting "the temp copy" at the end would delete the
-    // user's real saved file. Take just the file name instead, so we
-    // always operate on a genuine temp copy.
     let base_name = Path::new(&filename)
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
@@ -49,28 +44,27 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
         return Ok(());
     }
 
-    emit("✅ Compiled. Running ./program:\r\n\r\n".to_string());
+    emit(
+        "✅ Compiled. Running below — click the terminal and type if your program asks for input:\r\n\r\n"
+            .to_string(),
+    );
 
-    let run_output = Command::new(&binary_path)
-        .current_dir(&temp_dir)
-        .output()
-        .map_err(|e| format!("Failed to run program: {}", e))?;
+    // Run the program INSIDE the real shell instead of as a detached
+    // process. A detached process has no connected keyboard input, so
+    // scanf()/fgets() would hit end-of-input instantly — that's why input
+    // previously appeared broken. Typing the run command into the shell
+    // means stdin/stdout are the user's real terminal, same as running
+    // it by hand. The trailing commands clean up the temp files
+    // afterward, once the program has actually finished.
+    let run_line = format!(
+        "\"{}\"; echo \"[process exited: $?]\"; rm -f \"{}\" \"{}\"\r\n",
+        binary_path.display(),
+        binary_path.display(),
+        file_path.display()
+    );
 
-    let stdout = String::from_utf8_lossy(&run_output.stdout);
-    let stderr = String::from_utf8_lossy(&run_output.stderr);
-
-    if !stdout.is_empty() {
-        emit(stdout.replace('\n', "\r\n"));
-    }
-    if !stderr.is_empty() {
-        emit("⚠️ STDERR:\r\n".to_string());
-        emit(stderr.replace('\n', "\r\n"));
-    }
-
-    emit(format!("\r\n[process exited: {}]\r\n", run_output.status));
-
-    let _ = fs::remove_file(&file_path);
-    let _ = fs::remove_file(&binary_path);
+    send_to_terminal(&run_line)?;
+    let _ = app.emit(TERMINAL_FOCUS_EVENT, ());
 
     Ok(())
 }

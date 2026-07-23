@@ -333,7 +333,6 @@ body {
 
 /* ===== TERMINAL ===== */
 .terminal-panel {
-  height: 200px;
   background: var(--bg-primary);
   border-top: 2px solid var(--border);
   display: flex;
@@ -362,11 +361,30 @@ body {
   gap: 6px;
 }
 
+.terminal-drag-handle {
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.terminal-drag-handle:hover {
+  background: var(--accent, #ffb000);
+  opacity: 0.5;
+}
+
+.terminal-body-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .term-btn {
   width: 12px;
   height: 12px;
   border-radius: 50%;
   display: block;
+  cursor: pointer;
 }
 
 .term-btn.close { background: #ff5f56; }
@@ -435,4 +453,26 @@ body {
   );
   pointer-events: none;
   z-index: 9999;
+}
+.tab-close {
+  margin-left: 2px;
+  opacity: 0.5;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tab-close:hover {
+  opacity: 1;
+  color: var(--accent, #ffb000);
+}
+
+.editor-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 13px;
 }

@@ -1,193 +1,88 @@
-import { useState, useEffect, useCallback } from 'react';
-import { FileService } from './services/FileService';
+import { useEffect, useState } from 'react';
 import { CompileService } from './services/CompileService';
 import { Editor } from './components/editor/Editor';
-import { Terminal } from './components/terminal/Terminal';
+import { TabBar } from './components/editor/TabBar';
+import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { Toolbar } from './components/toolbar/Toolbar';
 import { FileTree } from './components/sidebar/FileTree';
+import { useTabs } from './hooks/useTabs';
+import { useFileExplorer } from './hooks/useFileExplorer';
 import './App.css';
 
 function App() {
-  const [code, setCode] = useState('');
-  const [output, setOutput] = useState('Welcome to C-Shell! Click "New" to create a file or "Open" to browse.\n');
   const [isRunning, setIsRunning] = useState(false);
-  const [currentFile, setCurrentFile] = useState<string | null>(null);
-  const [files, setFiles] = useState<string[]>([]);
-  const [currentDir, setCurrentDir] = useState('');
 
+  const {
+    tabs,
+    activeTabId,
+    activeTab,
+    setActiveTabId,
+    openFile,
+    newFile,
+    updateActiveCode,
+    saveFile,
+    closeTab,
+    removeTabForPath,
+  } = useTabs();
 
-  const loadDirectory = useCallback(async (dir: string) => {
-    try {
-      const fileList = await FileService.listDirectory(dir);
-      setFiles(fileList as string[]);
-      setCurrentDir(dir);
-    } catch (e) {
-      console.error('Failed to load directory:', e);
-      setOutput(prev => prev + `\nError loading directory: ${e}\n`);
-    }
-  }, []);
+  const { files, currentDir, loadDirectory, openFolder, openFileDialog, deleteFile } =
+    useFileExplorer();
 
   useEffect(() => {
     loadDirectory('/Users/mac/Desktop');
   }, [loadDirectory]);
 
-
-  const openFile = async (path: string) => {
-  alert("openFile() called!");
-
-  console.log(path);
-
-  try {
-    const content = await FileService.readFile(path);
-
-    alert("File read successfully!");
-
-    setCode(content);
-    setCurrentFile(path);
-
-    setOutput(prev => prev + `\nOpened: ${path}\n`);
-  } catch (e) {
-    alert(`ERROR:\n${e}`);
-    console.error(e);
-  }
-};
-
-const saveFile = async () => {
-    try {
-      let filePath = currentFile;
-
-      if (!filePath) {
-        filePath = await FileService.saveDialog();
-
-        if (!filePath) {
-          setOutput(prev => prev + "\n❌ Save cancelled.\n");
-          return;
-        }
-
-        await FileService.createFile(filePath);
-        setCurrentFile(filePath);
-      }
-
-      await FileService.writeFile(filePath, code);
-
-      setOutput(prev => prev + "\n💾 File saved!\n");
-
-      loadDirectory(filePath.substring(0, filePath.lastIndexOf("/")));
-    } catch (e) {
-      setOutput(prev => prev + `\nError saving: ${e}\n`);
-    }
+  const handleOpenFolder = async () => {
+    await openFolder();
   };
 
-  const newFile = async () => {
-    setCode(`#include <stdio.h>
-
-int main() {
-    printf("Hello, World!\n");
-    return 0;
-}
-`);
-
-    setCurrentFile(null);
-
-    setOutput(prev =>
-      prev + "\n📝 New untitled file created.\n"
-    );
+  const handleOpenFile = async () => {
+    const file = await openFileDialog();
+    if (file) await openFile(file);
   };
 
-  const openFolder = async () => {
-  try {
-    const folder = await FileService.openFolder();
+  const handleSave = () => {
+    saveFile(loadDirectory);
+  };
 
-    if (!folder) {
-      setOutput(prev => prev + "\n📁 Folder selection cancelled.\n");
+  const handleDelete = async (path: string) => {
+    const deleted = await deleteFile(path);
+    if (deleted) removeTabForPath(path);
+  };
+
+  const runCode = async () => {
+    if (!activeTab || !activeTab.path) {
+      alert('Please save the file first!');
       return;
     }
 
-    setCurrentDir(folder);
-
-    await loadDirectory(folder);
-
-    setOutput(prev =>
-      prev + `\n📂 Opened folder: ${folder}\n`
-    );
-  } catch (e) {
-    setOutput(prev => prev + `\n❌ ${e}\n`);
-  }
-};
-
- 
-
-
-  const openSingleFile = async () => {
+    setIsRunning(true);
     try {
-      const file = await FileService.openFileDialog();
-
-      if (!file) {
-        setOutput(prev => prev + "\n📄 Open cancelled.\n");
-        return;
-      }
-
-      await openFile(file);
-
-      const dir = file.substring(0, file.lastIndexOf("/"));
-      await loadDirectory(dir);
-      setCurrentDir(dir);
-
-      setOutput(prev => prev + `\n📄 Opened: ${file}\n`);
-    } catch (e) {
-      setOutput(prev => prev + `\n❌ ${e}\n`);
+      await CompileService.compileAndRun(activeTab.code, activeTab.path);
+    } catch (error) {
+      alert(`Failed to run: ${error}`);
     }
+    setIsRunning(false);
   };
-
-  const deleteFile = async (path: string) => {
-
-    if (confirm(`Delete ${path.split('/').pop()}?`)) {
-      try {
-        await FileService.deleteFile(path);
-        if (currentFile === path) {
-          setCurrentFile(null);
-          setCode('');
-        }
-        loadDirectory(currentDir);
-        setOutput(prev => prev + `\nDeleted: ${path}\n`);
-      } catch (e) {
-        setOutput(prev => prev + `\nError deleting: ${e}\n`);
-      }
-    }
-  };
-
-const runCode = async () => {
-  if (!currentFile) {
-    alert("Please save the file first!");
-    return;
-  }
-
-  setIsRunning(true);
-
-  try {
-    // Output now streams straight into the terminal panel below.
-    await CompileService.compileAndRun(code, currentFile);
-  } catch (error) {
-    alert(`Failed to run: ${error}`);
-  }
-
-  setIsRunning(false);
-};
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        saveFile();
+        handleSave();
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
         runCode();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        e.preventDefault();
+        if (activeTabId) closeTab(activeTabId);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [code, currentFile, currentDir]);
+  }, [activeTab, activeTabId]);
 
   return (
     <div className="app retro-theme">
@@ -195,51 +90,53 @@ const runCode = async () => {
         <span className="logo">⚡ C-SHELL</span>
         <span className="subtitle">v0.2.0 — Professional Edition</span>
       </div>
-      
+
       <div className="main-container">
-        <FileTree 
+        <FileTree
           files={files}
-          currentFile={currentFile}
+          currentFile={activeTab?.path ?? null}
           currentDir={currentDir}
           onFileSelect={openFile}
           onNewFile={newFile}
-          onOpenFolder={openFolder}
-          onDeleteFile={deleteFile}
+          onOpenFolder={handleOpenFolder}
+          onDeleteFile={handleDelete}
         />
-        
+
         <div className="editor-panel">
-         <Toolbar
-  onRun={runCode}
-  onSave={saveFile}
-  onNew={newFile}
-  onOpenFolder={openFolder}
-  onOpenFile={openSingleFile}
-  isRunning={isRunning}
-  currentFile={currentFile}
-/>
-          
+          <Toolbar
+            onRun={runCode}
+            onSave={handleSave}
+            onNew={newFile}
+            onOpenFolder={handleOpenFolder}
+            onOpenFile={handleOpenFile}
+            isRunning={isRunning}
+            currentFile={activeTab?.path ?? null}
+          />
+
           <div className="editor-wrapper">
-            <div className="tab-bar">
-              {currentFile ? (
-                <div className="tab active">
-                  {currentFile.split('/').pop()}
-                </div>
-              ) : (
-                <div className="tab">No file open</div>
-              )}
-            </div>
-            <Editor 
-              code={code} 
-              onChange={setCode}
+            <TabBar
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelect={setActiveTabId}
+              onClose={closeTab}
             />
+
+            {activeTab ? (
+              <Editor code={activeTab.code} onChange={updateActiveCode} />
+            ) : (
+              <div className="editor-empty-state">
+                <p>No file open</p>
+                <p>Click "New" to create a file or "Open File" to browse.</p>
+              </div>
+            )}
           </div>
-          
-          <Terminal />
+
+          <TerminalPanel />
         </div>
       </div>
-      
+
       <div className="statusbar">
-        <span>📁 {currentFile || 'No file'}</span>
+        <span>📁 {activeTab?.path || 'No file'}</span>
         <span>{currentDir || 'No folder'}</span>
         <span>{isRunning ? '🟡 Running' : '🟢 Ready'}</span>
         <span>C99 Standard</span>
