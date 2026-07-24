@@ -18,13 +18,7 @@ export function FileTree({
   onDeleteFile,
 }: FileTreeProps) {
   return (
-    <div
-      className="file-tree"
-      onClickCapture={() => {
-        console.log("FILE TREE CLICK");
-        alert("FILE TREE CLICK");
-      }}
-    >
+    <div className="file-tree">
       <div className="file-tree-header">
         <span>📂 EXPLORER</span>
       </div>
@@ -66,17 +60,11 @@ export function FileTree({
               <div
                 key={file}
                 className={`file-item ${isActive ? "active" : ""}`}
-                onClick={() => {
-                  console.log("Clicked:", file);
-                  alert(file);
-                  onFileSelect(file);
-                }}
+                onClick={() => onFileSelect(file)}
               >
                 <span className="file-icon">📄</span>
 
-                <span className="file-name">
-                  {filename}
-                </span>
+                <span className="file-name">{filename}</span>
 
                 <button
                   className="delete-btn"

@@ -7,10 +7,7 @@ export class FileService {
   }
 
   static async writeFile(path: string, contents: string): Promise<void> {
-    await invoke("write_file", {
-      path,
-      contents,
-    });
+    await invoke("write_file", { path, contents });
   }
 
   static async createFile(path: string): Promise<void> {
@@ -28,36 +25,26 @@ export class FileService {
   static async saveDialog(): Promise<string | null> {
     return await save({
       defaultPath: "Untitled.c",
-      filters: [
-        {
-          name: "C Source",
-          extensions: ["c"],
-        },
-      ],
+      filters: [{ name: "C Source", extensions: ["c"] }],
     });
   }
 
   static async openFileDialog(): Promise<string | null> {
-  return await open({
-    multiple: false,
-    directory: false,
-    filters: [
-      {
-        name: "C Source",
-        extensions: ["c", "h"],
-      },
-    ],
-  }) as string | null;
-}
-
-  static async openFolder(): Promise<string | null> {
-    return await open({
-      directory: true,
+    return (await open({
       multiple: false,
-    }) as string | null;
+      directory: false,
+      filters: [{ name: "C Source", extensions: ["c", "h"] }],
+    })) as string | null;
   }
 
-static async startTerminal(): Promise<void> {
+  static async openFolder(): Promise<string | null> {
+    return (await open({
+      directory: true,
+      multiple: false,
+    })) as string | null;
+  }
+
+  static async startTerminal(): Promise<void> {
     await invoke("start_terminal");
   }
 

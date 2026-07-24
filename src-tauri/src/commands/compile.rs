@@ -49,20 +49,19 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
             .to_string(),
     );
 
-    // Run the program INSIDE the real shell instead of as a detached
-    // process. A detached process has no connected keyboard input, so
-    // scanf()/fgets() would hit end-of-input instantly — that's why input
-    // previously appeared broken. Typing the run command into the shell
-    // means stdin/stdout are the user's real terminal, same as running
-    // it by hand. The trailing commands clean up the temp files
-    // afterward, once the program has actually finished.
+    
+// Run everything inside a subshell `(...)` instead of a plain `cd` —
+    // a bare `cd` would permanently move the user's actual terminal
+    // session into the temp folder. A subshell's `cd` only applies
+    // inside those parentheses, so the real session's directory is
+    // completely unaffected once this line finishes.
     let run_line = format!(
-        "\"{}\"; echo \"[process exited: $?]\"; rm -f \"{}\" \"{}\"\r\n",
-        binary_path.display(),
-        binary_path.display(),
-        file_path.display()
+        "(cd \"{}\" && ./{}; echo \"[process exited: $?]\"; rm -f {} {})\r\n",
+        temp_dir.display(),
+        binary_name,
+        binary_name,
+        base_name
     );
-
     send_to_terminal(&run_line)?;
     let _ = app.emit(TERMINAL_FOCUS_EVENT, ());
 
