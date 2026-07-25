@@ -8,34 +8,25 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build application
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Tauri App
+        run: npm run tauri build
 
-      - name: Find generated files
+      - name: Find Installer
         shell: bash
         run: |
-          echo "========== ALL INSTALLERS =========="
-          find . -type f \( -name "*.exe" -o -name "*.msi" \) || true
-
-          echo "========== BUNDLE TREE =========="
-          ls -R src-tauri/target/release/bundle || true
-
-      - name: Upload Debug Build
-        uses: actions/upload-artifact@v4
-        with:
-          name: c-shell-debug-output
-          path: |
-            src-tauri/target/**
-          if-no-files-found: error
+          echo "Searching..."
+          find src-tauri/target -type f \( -name "*.exe" -o -name "*.msi" \)
