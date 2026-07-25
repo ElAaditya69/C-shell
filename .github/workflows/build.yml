@@ -1,63 +1,37 @@
-name: Build and Release C-Shell
+name: Build C-Shell
 
 on:
-  push:
-    tags:
-      - "v*"
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  build:
-    name: Build (${{ matrix.platform }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-latest
-            args: --target aarch64-apple-darwin
-
-          - platform: windows-latest
-            args: ""
-
-    runs-on: ${{ matrix.platform }}
+  windows:
+    runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install frontend dependencies
+      - name: Install dependencies
         run: npm install
 
-      - name: Build and publish
+      - name: Build application
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: C-Shell ${{ github.ref_name }}
-          releaseBody: |
-            ## C-Shell Beta
+          args: ""
 
-            Automated beta build.
-
-            ### Included
-            - Windows Installer
-            - macOS Installer
-
-            Please report bugs through GitHub Issues.
-
-          releaseDraft: false
-          prerelease: true
-          includeUpdaterJson: false
-          args: ${{ matrix.args }}
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: c-shell-windows
+          path: |
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
+          if-no-files-found: error
