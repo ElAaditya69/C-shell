@@ -23,20 +23,19 @@ jobs:
       - name: Build application
         uses: tauri-apps/tauri-action@v0
 
-      - name: Debug Tauri Output
+      - name: Find generated files
         shell: bash
         run: |
-          echo "========== FINDING INSTALLERS =========="
-          find src-tauri/target -type f \( -name "*.exe" -o -name "*.msi" \) || true
+          echo "========== ALL INSTALLERS =========="
+          find . -type f \( -name "*.exe" -o -name "*.msi" \) || true
 
-          echo "========== BUNDLE DIRECTORY =========="
+          echo "========== BUNDLE TREE =========="
           ls -R src-tauri/target/release/bundle || true
 
-      - name: Upload Windows Installer
+      - name: Upload Debug Build
         uses: actions/upload-artifact@v4
         with:
-          name: c-shell-windows-installer
+          name: c-shell-debug-output
           path: |
-            src-tauri/target/release/bundle/**/*.exe
-            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/**
           if-no-files-found: error
