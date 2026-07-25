@@ -71,38 +71,61 @@ export function useTabs() {
     );
   };
 
+  const writeAndUpdateTab = async (
+    tab: OpenTab,
+    filePath: string,
+    isNewId: boolean
+  ) => {
+    await FileService.writeFile(filePath, tab.code);
+    const tabId = isNewId ? filePath : tab.id;
+
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === tab.id
+          ? {
+              ...t,
+              id: tabId,
+              path: filePath,
+              name: filePath.split("/").pop()!,
+              savedCode: tab.code,
+            }
+          : t
+      )
+    );
+    setActiveTabId(tabId);
+  };
+
   const saveFile = async (onSaved?: (dir: string) => void) => {
     if (!activeTab) return;
 
     try {
       let filePath = activeTab.path;
-      let tabId = activeTab.id;
+      let isNewId = false;
 
       if (!filePath) {
         filePath = await FileService.saveDialog();
         if (!filePath) return;
 
         await FileService.createFile(filePath);
-        tabId = filePath;
+        isNewId = true;
       }
 
-      await FileService.writeFile(filePath, activeTab.code);
+      await writeAndUpdateTab(activeTab, filePath, isNewId);
+      onSaved?.(filePath.substring(0, filePath.lastIndexOf("/")));
+    } catch (e) {
+      alert(`Error saving: ${e}`);
+    }
+  };
 
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === activeTab.id
-            ? {
-                ...t,
-                id: tabId,
-                path: filePath!,
-                name: filePath!.split("/").pop()!,
-                savedCode: activeTab.code,
-              }
-            : t
-        )
-      );
-      setActiveTabId(tabId);
+  const saveFileAs = async (onSaved?: (dir: string) => void) => {
+    if (!activeTab) return;
 
+    try {
+      const filePath = await FileService.saveDialog();
+      if (!filePath) return;
+
+      await FileService.createFile(filePath);
+      await writeAndUpdateTab(activeTab, filePath, true);
       onSaved?.(filePath.substring(0, filePath.lastIndexOf("/")));
     } catch (e) {
       alert(`Error saving: ${e}`);
@@ -152,6 +175,7 @@ export function useTabs() {
     newFile,
     updateActiveCode,
     saveFile,
+    saveFileAs,
     closeTab,
     removeTabForPath,
   };

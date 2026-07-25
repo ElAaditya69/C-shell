@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { listen } from "@tauri-apps/api/event";
@@ -6,9 +6,26 @@ import { FileService } from "../../services/FileService";
 
 import "xterm/css/xterm.css";
 
-export function XTermView() {
+export interface XTermHandle {
+  clear: () => void;
+  sendInterrupt: () => void;
+}
+
+export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    clear: () => xtermRef.current?.clear(),
+    sendInterrupt: () => {
+      // Ctrl+C, forwarded through the real shell — the shell delivers
+      // SIGINT to whatever's currently running in the foreground (the
+      // compiled program), same as pressing Ctrl+C in any real terminal.
+      FileService.sendCommand("\x03").catch((err) =>
+        console.error("Failed to send interrupt:", err)
+      );
+    },
+  }));
 
   useEffect(() => {
     if (!terminalRef.current || xtermRef.current) return;
@@ -18,6 +35,7 @@ export function XTermView() {
       fontFamily: "JetBrains Mono, monospace",
       fontSize: 14,
       convertEol: true,
+      scrollback: 5000,
       theme: {
         background: "#0b0b12",
         foreground: "#ffb000",
@@ -71,19 +89,13 @@ export function XTermView() {
       );
     });
 
-    // IMPORTANT: fitAddon.fit() slightly adjusts this same container's
-    // internal sizing, which would immediately re-trigger this observer
-    // if called synchronously here — creating an infinite resize loop
-    // that pegs the JS thread and blocks keyboard input entirely.
-    // Deferring the actual work to the next animation frame (and
-    // cancelling any pending one) breaks that loop.
     let rafId: number | null = null;
 
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
       const { width, height } = entry.contentRect;
-      if (width === 0 || height === 0) return; // hidden (minimized/closed)
+      if (width === 0 || height === 0) return;
 
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
@@ -107,13 +119,9 @@ export function XTermView() {
     };
   }, []);
 
-return (
-    // Padding lives on this outer wrapper, NOT on the div xterm.js
-    // measures and fits against — padding on the fitted element itself
-    // causes fit()'s size calculation to be slightly off, which creates
-    // a self-triggering resize feedback loop (the flicker/black-out).
+  return (
     <div style={{ width: "100%", height: "100%", padding: "10px", boxSizing: "border-box" }}>
       <div ref={terminalRef} style={{ width: "100%", height: "100%" }} />
     </div>
   );
-}
+});

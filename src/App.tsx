@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CompileService } from './services/CompileService';
-import { Editor } from './components/editor/Editor';
+import { Editor, EditorHandle } from './components/editor/Editor';
 import { TabBar } from './components/editor/TabBar';
+import { QuickOpen } from './components/editor/QuickOpen';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { Toolbar } from './components/toolbar/Toolbar';
 import { FileTree } from './components/sidebar/FileTree';
@@ -11,6 +12,8 @@ import './App.css';
 
 function App() {
   const [isRunning, setIsRunning] = useState(false);
+  const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+  const editorRef = useRef<EditorHandle>(null);
 
   const {
     tabs,
@@ -21,6 +24,7 @@ function App() {
     newFile,
     updateActiveCode,
     saveFile,
+    saveFileAs,
     closeTab,
     removeTabForPath,
   } = useTabs();
@@ -45,6 +49,10 @@ function App() {
     saveFile(loadDirectory);
   };
 
+  const handleSaveAs = () => {
+    saveFileAs(loadDirectory);
+  };
+
   const handleDelete = async (path: string) => {
     const deleted = await deleteFile(path);
     if (deleted) removeTabForPath(path);
@@ -67,22 +75,55 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      if (quickOpenVisible) return;
+
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+
+      if (mod && e.shiftKey && key === 's') {
+        e.preventDefault();
+        handleSaveAs();
+        return;
+      }
+      if (mod && key === 's') {
         e.preventDefault();
         handleSave();
+        return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      if (mod && key === 'enter') {
         e.preventDefault();
         runCode();
+        return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+      if (mod && key === 'w') {
         e.preventDefault();
         if (activeTabId) closeTab(activeTabId);
+        return;
+      }
+      if (mod && key === 'n') {
+        e.preventDefault();
+        newFile();
+        return;
+      }
+      if (mod && key === 'o') {
+        e.preventDefault();
+        handleOpenFolder();
+        return;
+      }
+      if (mod && key === 'p') {
+        e.preventDefault();
+        setQuickOpenVisible((v) => !v);
+        return;
+      }
+      if (mod && key === '/') {
+        e.preventDefault();
+        editorRef.current?.toggleComment();
+        return;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, activeTabId]);
+  }, [activeTab, activeTabId, quickOpenVisible]);
 
   return (
     <div className="app retro-theme">
@@ -122,7 +163,11 @@ function App() {
             />
 
             {activeTab ? (
-              <Editor code={activeTab.code} onChange={updateActiveCode} />
+              <Editor
+                ref={editorRef}
+                code={activeTab.code}
+                onChange={updateActiveCode}
+              />
             ) : (
               <div className="editor-empty-state">
                 <p>No file open</p>
@@ -141,6 +186,14 @@ function App() {
         <span>{isRunning ? '🟡 Running' : '🟢 Ready'}</span>
         <span>C99 Standard</span>
       </div>
+
+      {quickOpenVisible && (
+        <QuickOpen
+          files={files}
+          onSelect={openFile}
+          onClose={() => setQuickOpenVisible(false)}
+        />
+      )}
     </div>
   );
 }

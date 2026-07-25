@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { XTermView } from "./XTermView";
+import { XTermView, XTermHandle } from "./XTermView";
 
 type Mode = "normal" | "minimized" | "maximized" | "closed";
 
@@ -12,6 +12,7 @@ export function TerminalPanel() {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [mode, setMode] = useState<Mode>("normal");
   const draggingRef = useRef(false);
+  const xtermRef = useRef<XTermHandle>(null);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -58,31 +59,57 @@ export function TerminalPanel() {
 
       <div className="terminal-header" onClick={restore}>
         <span className="terminal-title">🖥️ TERMINAL</span>
-        <div className="terminal-buttons">
-          <span
-            className="term-btn close"
-            title="Close"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMode(mode === "closed" ? "normal" : "closed");
-            }}
-          />
-          <span
-            className="term-btn minimize"
-            title="Minimize"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMode(mode === "minimized" ? "normal" : "minimized");
-            }}
-          />
-          <span
-            className="term-btn maximize"
-            title="Maximize"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMode(mode === "maximized" ? "normal" : "maximized");
-            }}
-          />
+
+        <div className="terminal-header-right">
+          <div className="terminal-actions">
+            <button
+              className="terminal-action-btn"
+              title="Clear terminal"
+              onClick={(e) => {
+                e.stopPropagation();
+                xtermRef.current?.clear();
+              }}
+            >
+              🧹 Clear
+            </button>
+            <button
+              className="terminal-action-btn"
+              title="Stop running program (Ctrl+C)"
+              onClick={(e) => {
+                e.stopPropagation();
+                xtermRef.current?.sendInterrupt();
+              }}
+            >
+              ⏹ Stop
+            </button>
+          </div>
+
+          <div className="terminal-buttons">
+            <span
+              className="term-btn close"
+              title="Close"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMode(mode === "closed" ? "normal" : "closed");
+              }}
+            />
+            <span
+              className="term-btn minimize"
+              title="Minimize"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMode(mode === "minimized" ? "normal" : "minimized");
+              }}
+            />
+            <span
+              className="term-btn maximize"
+              title="Maximize"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMode(mode === "maximized" ? "normal" : "maximized");
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -92,7 +119,7 @@ export function TerminalPanel() {
           display: mode === "minimized" || mode === "closed" ? "none" : "block",
         }}
       >
-        <XTermView />
+        <XTermView ref={xtermRef} />
       </div>
     </div>
   );
