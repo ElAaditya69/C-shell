@@ -26,6 +26,13 @@ jobs:
         run: npm run tauri build
 
       - name: Find Installer
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: c-shell-windows-installer
+          path: |
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
         shell: bash
         run: |
           echo "Searching..."
