@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           echo "========== FINDING INSTALLERS =========="
-          find . -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" \)
+          find src-tauri/target -type f \( -name "*.exe" -o -name "*.msi" \) || true
 
-          echo "========== TARGET TREE =========="
-          ls -R src-tauri/target | head -200
+          echo "========== BUNDLE DIRECTORY =========="
+          ls -laR src-tauri/target/release/bundle || true
