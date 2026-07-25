@@ -22,10 +22,6 @@ jobs:
 
       - name: Build application
         uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: ""
 
       - name: Debug Tauri Output
         shell: bash
@@ -34,4 +30,13 @@ jobs:
           find src-tauri/target -type f \( -name "*.exe" -o -name "*.msi" \) || true
 
           echo "========== BUNDLE DIRECTORY =========="
-          ls -laR src-tauri/target/release/bundle || true
+          ls -R src-tauri/target/release/bundle || true
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: c-shell-windows-installer
+          path: |
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
+          if-no-files-found: error
