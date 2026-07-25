@@ -29,6 +29,9 @@ impl PtyManager {
         let mut cmd = CommandBuilder::new("/bin/zsh");
         cmd.arg("-l"); // login shell, so it behaves like a real terminal (.zprofile etc.)
 
+        
+        cmd.env("TERM", "xterm-256color");
+
         pair.slave
             .spawn_command(cmd)
             .map_err(|e| e.to_string())?;
