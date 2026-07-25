@@ -2,43 +2,37 @@ name: Build C-Shell
 
 on:
   push:
-    branches:
-      - main
-
+    branches: [main]
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
+
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: macos-latest
-          - platform: ubuntu-22.04
-          - platform: windows-latest
+        os:
+          - macos-latest
+          - windows-latest
+          - ubuntu-22.04
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
 
     steps:
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - uses: dtolnay/rust-toolchain@stable
 
       - run: npm install
 
       - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/upload-artifact@v4
         with:
-          tagName: dev
-          releaseName: Development Build
-          releaseDraft: false
-          prerelease: true
+          name: C-Shell-${{ matrix.os }}
+          path: src-tauri/target/release/bundle/**
