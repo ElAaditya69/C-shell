@@ -27,8 +27,13 @@ jobs:
         with:
           args: ""
 
-      - name: Upload Windows Installer
-        uses: actions/upload-artifact@v4
+      - name: Debug Tauri Output
+        shell: bash
+        run: |
+          echo "========== FINDING INSTALLERS =========="
+          find . -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" \)
+          echo "========== TARGET TREE =========="
+          ls -R src-tauri/target | head -200
         with:
           name: c-shell-windows
           path: |
