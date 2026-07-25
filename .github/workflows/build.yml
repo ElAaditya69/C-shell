@@ -32,11 +32,6 @@ jobs:
         run: |
           echo "========== FINDING INSTALLERS =========="
           find . -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" \)
+
           echo "========== TARGET TREE =========="
           ls -R src-tauri/target | head -200
-        with:
-          name: c-shell-windows
-          path: |
-            src-tauri/target/release/bundle/**/*.exe
-            src-tauri/target/release/bundle/**/*.msi
-          if-no-files-found: error
