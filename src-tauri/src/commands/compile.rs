@@ -83,8 +83,15 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
     );
 
 let run_line = if cfg!(windows) {
+    // cmd.exe, not PowerShell — matches the shell actually spawned in
+    // pty.rs. `pushd`/`popd` protects the real session's directory the
+    // same way the Unix subshell does; `if errorlevel 1` is cmd.exe's
+    // native (no-delayed-expansion-needed) way to check a non-zero
+    // exit code. Windows has no real equivalent to POSIX signals, so
+    // unlike the Unix branch this only distinguishes success vs.
+    // non-zero — there's no meaningful "killed by signal N" to report.
     format!(
-        "Set-Location \"{}\"; .\\{}; echo \"✅ Program exited successfully\"; Remove-Item {} {} -ErrorAction SilentlyContinue; echo \"{}\"\r\n",
+        "pushd \"{}\" && {} & if errorlevel 1 (echo ⚠️ Program exited with a non-zero code) else (echo ✅ Program exited successfully) & del /f /q {} {} >nul 2>&1 & popd & echo {}\r\n",
         temp_dir.display(),
         binary_name,
         binary_name,
