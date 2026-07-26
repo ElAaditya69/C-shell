@@ -26,8 +26,19 @@ impl PtyManager {
             })
             .map_err(|e| e.to_string())?;
 
-        let mut cmd = CommandBuilder::new("/bin/zsh");
-        cmd.arg("-l"); // login shell, so it behaves like a real terminal (.zprofile etc.)
+        #[cfg(target_os = "windows")]
+let mut cmd = {
+    let mut command = CommandBuilder::new("powershell.exe");
+    command.arg("-NoLogo");
+    command
+};
+
+#[cfg(not(target_os = "windows"))]
+let mut cmd = {
+    let mut command = CommandBuilder::new("/bin/zsh");
+    command.arg("-l");
+    command
+};
 
         
         cmd.env("TERM", "xterm-256color");

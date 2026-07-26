@@ -82,18 +82,25 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
             .to_string(),
     );
 
-    // The marker echo is now INSIDE the subshell parens — it's part of
-    // the same single command, so only one shell prompt appears
-    // afterward instead of two.
-    let run_line = format!(
+let run_line = if cfg!(windows) {
+    format!(
+        "cd /d \"{}\" && .\\{} && echo \"✅ Program exited successfully\" && del {} {} && echo \"{}\"\r\n",
+        temp_dir.display(),
+        binary_name,
+        binary_name,
+        base_name,
+        RUN_DONE_MARKER
+    )
+} else {
+    format!(
         "(cd \"{}\" && ./{}; code=$?; if [ $code -eq 0 ]; then echo \"✅ Program exited successfully\"; elif [ $code -gt 128 ]; then echo \"🛑 Program terminated by signal $((code-128))\"; else echo \"⚠️ Program exited with code $code\"; fi; rm -f {} {}; echo \"{}\")\r\n",
         temp_dir.display(),
         binary_name,
         binary_name,
         base_name,
         RUN_DONE_MARKER
-    );
-
+    )
+};
     send_to_terminal(&run_line)?;
     let _ = app.emit(TERMINAL_FOCUS_EVENT, ());
 
