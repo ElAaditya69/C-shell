@@ -84,7 +84,7 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
 
 let run_line = if cfg!(windows) {
     format!(
-        "cd /d \"{}\" && .\\{} && echo \"✅ Program exited successfully\" && del {} {} && echo \"{}\"\r\n",
+        "Set-Location \"{}\"; .\\{}; echo \"✅ Program exited successfully\"; Remove-Item {} {} -ErrorAction SilentlyContinue; echo \"{}\"\r\n",
         temp_dir.display(),
         binary_name,
         binary_name,
