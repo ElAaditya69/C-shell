@@ -1,10 +1,8 @@
-
 mod commands;
 mod terminal;
 
 use commands::*;
-
-
+use tauri::Emitter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,8 +17,20 @@ pub fn run() {
             delete_file,
             start_terminal,
             send_command,
-            resize_terminal
+            resize_terminal,
+            confirm_quit
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                // Always intercept first — the frontend decides whether
+                // it's actually OK to quit (checking for unsaved changes)
+                // and calls confirm_quit if so. This is the only way to
+                // reliably catch Cmd+Q / the Quit menu on macOS, which
+                // bypass the window's own close-requested event entirely.
+                api.prevent_exit();
+                let _ = app_handle.emit("quit-requested", ());
+            }
+        });
 }

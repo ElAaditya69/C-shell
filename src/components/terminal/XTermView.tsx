@@ -11,6 +11,9 @@ export interface XTermHandle {
   sendInterrupt: () => void;
 }
 
+const RUN_DONE_MARKER = "__CSHELL_RUN_DONE__";
+export const RUN_FINISHED_EVENT = "cshell:run-finished";
+
 export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -18,12 +21,14 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
   useImperativeHandle(ref, () => ({
     clear: () => xtermRef.current?.clear(),
     sendInterrupt: () => {
-      // Ctrl+C, forwarded through the real shell — the shell delivers
-      // SIGINT to whatever's currently running in the foreground (the
-      // compiled program), same as pressing Ctrl+C in any real terminal.
       FileService.sendCommand("\x03").catch((err) =>
         console.error("Failed to send interrupt:", err)
       );
+      // Ctrl+C kills the ENTIRE chained run command, including the
+      // trailing "done" marker echo — so that marker will never arrive.
+      // Clicking Stop already IS the "I'm done" moment; reflect it
+      // immediately instead of waiting on a signal that isn't coming.
+      window.dispatchEvent(new CustomEvent(RUN_FINISHED_EVENT));
     },
   }));
 
@@ -61,7 +66,19 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
 
     (async () => {
       unlistenOutput = await listen<string>("terminal-output", (event) => {
-        term.write(event.payload);
+        const payload = event.payload;
+
+        if (payload.includes(RUN_DONE_MARKER)) {
+          const cleaned = payload
+            .split(RUN_DONE_MARKER)
+            .join("")
+            .replace(/\r?\n$/, "\r\n");
+          if (cleaned.trim().length > 0) term.write(cleaned);
+          window.dispatchEvent(new CustomEvent(RUN_FINISHED_EVENT));
+          return;
+        }
+
+        term.write(payload);
       });
       unlistenFocus = await listen("terminal-focus", () => {
         term.focus();
@@ -84,6 +101,10 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
     })();
 
     term.onData((data) => {
+
+      if (data === "\x03") {
+        window.dispatchEvent(new CustomEvent(RUN_FINISHED_EVENT));
+      }
       FileService.sendCommand(data).catch((err) =>
         console.error("Failed to send input:", err)
       );

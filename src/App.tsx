@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { CompileService } from './services/CompileService';
 import { Editor, EditorHandle } from './components/editor/Editor';
 import { TabBar } from './components/editor/TabBar';
 import { QuickOpen } from './components/editor/QuickOpen';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
-import { Toolbar } from './components/toolbar/Toolbar';
+import { RUN_FINISHED_EVENT } from './components/terminal/XTermView';
+import { Toolbar, RunState } from './components/toolbar/Toolbar';
 import { FileTree } from './components/sidebar/FileTree';
 import { useTabs } from './hooks/useTabs';
 import { useFileExplorer } from './hooks/useFileExplorer';
 import './App.css';
 
 function App() {
-  const [isRunning, setIsRunning] = useState(false);
+  const [runState, setRunState] = useState<RunState>('idle');
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
   const editorRef = useRef<EditorHandle>(null);
 
@@ -64,14 +67,57 @@ function App() {
       return;
     }
 
-    setIsRunning(true);
+    setRunState('compiling');
     try {
       await CompileService.compileAndRun(activeTab.code, activeTab.path);
+      setRunState('running');
     } catch (error) {
       alert(`Failed to run: ${error}`);
+      setRunState('idle');
     }
-    setIsRunning(false);
   };
+
+  useEffect(() => {
+    const handleRunFinished = () => setRunState('idle');
+    window.addEventListener(RUN_FINISHED_EVENT, handleRunFinished);
+    return () => window.removeEventListener(RUN_FINISHED_EVENT, handleRunFinished);
+  }, []);
+
+  // Always-current snapshot of tabs, read inside the quit handler below
+  // without needing to re-subscribe to it on every keystroke.
+  const tabsRef = useRef(tabs);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  // The Rust side intercepts EVERY quit path (red button, Cmd+Q, Quit
+  // menu) and always prevents it first, then asks us here whether it's
+  // actually OK to proceed.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    (async () => {
+      unlisten = await listen('quit-requested', async () => {
+        const hasUnsaved = tabsRef.current.some((t) => t.code !== t.savedCode);
+
+        if (!hasUnsaved) {
+          await invoke('confirm_quit');
+          return;
+        }
+
+        const confirmed = window.confirm(
+          'You have unsaved changes. Quit anyway?'
+        );
+        if (confirmed) {
+          await invoke('confirm_quit');
+        }
+      });
+    })();
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -150,7 +196,7 @@ function App() {
             onNew={newFile}
             onOpenFolder={handleOpenFolder}
             onOpenFile={handleOpenFile}
-            isRunning={isRunning}
+            runState={runState}
             currentFile={activeTab?.path ?? null}
           />
 
@@ -183,7 +229,13 @@ function App() {
       <div className="statusbar">
         <span>📁 {activeTab?.path || 'No file'}</span>
         <span>{currentDir || 'No folder'}</span>
-        <span>{isRunning ? '🟡 Running' : '🟢 Ready'}</span>
+        <span>
+          {runState === 'idle'
+            ? '🟢 Ready'
+            : runState === 'compiling'
+            ? '🟡 Compiling'
+            : '🟡 Running'}
+        </span>
         <span>C99 Standard</span>
       </div>
 

@@ -5,10 +5,8 @@ use std::path::Path;
 use std::process::Command;
 use tauri::{command, AppHandle, Emitter};
 
-/// Wraps gcc's own "error:"/"warning:" lines in ANSI color codes so they
-/// stand out in the terminal — red for errors, yellow for warnings.
-/// Other lines (like the source snippet gcc prints under each message)
-/// are left as-is.
+const RUN_DONE_MARKER: &str = "__CSHELL_RUN_DONE__";
+
 fn colorize_gcc_output(output: &str) -> String {
     output
         .lines()
@@ -49,8 +47,6 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
         let _ = app.emit(TERMINAL_OUTPUT_EVENT, text);
     };
 
-    // Remove any executable left over from a previous run, so a failed
-    // compile can never leave a stale binary around to be run by mistake.
     let _ = fs::remove_file(&binary_path);
 
     emit(format!("\r\n$ gcc {} -o program -std=c99 -Wall\r\n", base_name));
@@ -70,12 +66,11 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
         emit("\x1b[31m❌ COMPILATION ERROR:\x1b[0m\r\n".to_string());
         emit(colorize_gcc_output(&stderr));
         emit("\r\n".to_string());
+        emit(format!("{}\r\n", RUN_DONE_MARKER));
         let _ = fs::remove_file(&file_path);
         return Ok(());
     }
 
-    // gcc can succeed AND still print warnings (that's the whole point of
-    // -Wall) — these were previously being silently thrown away.
     if !stderr.trim().is_empty() {
         emit("\x1b[33m⚠️ COMPILER WARNINGS:\x1b[0m\r\n".to_string());
         emit(colorize_gcc_output(&stderr));
@@ -87,21 +82,16 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
             .to_string(),
     );
 
-    // Run everything inside a subshell `(...)` instead of a plain `cd` —
-    // a bare `cd` would permanently move the user's actual terminal
-    // session into the temp folder. A subshell's `cd` only applies
-    // inside those parentheses.
-    //
-    // The exit message distinguishes: a clean exit (code 0), a program
-    // killed by a signal — e.g. the Stop button sending Ctrl+C, which
-    // by shell convention shows up as exit code 128+signal — and a
-    // normal non-zero exit code (e.g. `return 1;` in main).
+    // The marker echo is now INSIDE the subshell parens — it's part of
+    // the same single command, so only one shell prompt appears
+    // afterward instead of two.
     let run_line = format!(
-        "(cd \"{}\" && ./{}; code=$?; if [ $code -eq 0 ]; then echo \"✅ Program exited successfully\"; elif [ $code -gt 128 ]; then echo \"🛑 Program terminated by signal $((code-128))\"; else echo \"⚠️ Program exited with code $code\"; fi; rm -f {} {})\r\n",
+        "(cd \"{}\" && ./{}; code=$?; if [ $code -eq 0 ]; then echo \"✅ Program exited successfully\"; elif [ $code -gt 128 ]; then echo \"🛑 Program terminated by signal $((code-128))\"; else echo \"⚠️ Program exited with code $code\"; fi; rm -f {} {}; echo \"{}\")\r\n",
         temp_dir.display(),
         binary_name,
         binary_name,
-        base_name
+        base_name,
+        RUN_DONE_MARKER
     );
 
     send_to_terminal(&run_line)?;

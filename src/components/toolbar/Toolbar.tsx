@@ -1,10 +1,12 @@
+export type RunState = "idle" | "compiling" | "running";
+
 interface ToolbarProps {
   onRun: () => void;
   onSave: () => void;
   onNew: () => void;
   onOpenFolder: () => void;
   onOpenFile: () => void;
-  isRunning: boolean;
+  runState: RunState;
   currentFile: string | null;
 }
 
@@ -14,34 +16,33 @@ export function Toolbar({
   onNew,
   onOpenFolder,
   onOpenFile,
-  isRunning,
+  runState,
   currentFile,
 }: ToolbarProps) {
+  const runLabel =
+    runState === "compiling"
+      ? "⏳ Compiling..."
+      : runState === "running"
+      ? "🟡 Running..."
+      : "▶ Run";
+
   return (
     <div className="toolbar">
       <div className="toolbar-left">
         <button
-          className={`run-btn ${isRunning ? "running" : ""}`}
+          className={`run-btn ${runState !== "idle" ? "running" : ""}`}
           onClick={onRun}
-          disabled={isRunning}
+          disabled={runState !== "idle"}
           title="Run (Ctrl+Enter)"
         >
-          {isRunning ? "⏳ Running..." : "▶ Run"}
+          {runLabel}
         </button>
 
-        <button
-          className="tool-btn"
-          onClick={onSave}
-          title="Save (Ctrl+S)"
-        >
+        <button className="tool-btn" onClick={onSave} title="Save (Ctrl+S)">
           💾 Save
         </button>
 
-        <button
-          className="tool-btn"
-          onClick={onNew}
-          title="New File"
-        >
+        <button className="tool-btn" onClick={onNew} title="New File">
           📝 New
         </button>
 
@@ -53,18 +54,12 @@ export function Toolbar({
           📁 Open Folder
         </button>
 
-        <button
-          className="tool-btn"
-          onClick={onOpenFile}
-          title="Open File"
-        >
+        <button className="tool-btn" onClick={onOpenFile} title="Open File">
           📄 Open File
         </button>
 
         {currentFile && (
-          <span className="file-label">
-            {currentFile.split("/").pop()}
-          </span>
+          <span className="file-label">{currentFile.split("/").pop()}</span>
         )}
       </div>
 
