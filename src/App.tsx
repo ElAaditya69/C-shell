@@ -77,20 +77,36 @@ function App() {
     }
   };
 
+  const buildCode = async () => {
+    if (!activeTab || !activeTab.path) {
+      alert('Please save the file first!');
+      return;
+    }
+
+    setRunState('building');
+    try {
+      // build_only's promise resolves once gcc has genuinely finished —
+      // unlike Run, there's no async hand-off to the terminal afterward,
+      // so no marker/event dance is needed here.
+      await CompileService.build(activeTab.code, activeTab.path);
+    } catch (error) {
+      alert(`Failed to build: ${error}`);
+    }
+    setRunState('idle');
+  };
+
   useEffect(() => {
     const handleRunFinished = () => setRunState('idle');
     window.addEventListener(RUN_FINISHED_EVENT, handleRunFinished);
     return () => window.removeEventListener(RUN_FINISHED_EVENT, handleRunFinished);
   }, []);
 
-  // Always-current snapshot of tabs, read inside the quit handler below
-  // without needing to re-subscribe to it on every keystroke.
   const tabsRef = useRef(tabs);
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
 
-  // The Rust side intercepts EVERY quit path (red button, Cmd+Q, Quit
+  // The Rust side intercepts every quit path (red button, Cmd+Q, Quit
   // menu) and always prevents it first, then asks us here whether it's
   // actually OK to proceed.
   useEffect(() => {
@@ -125,6 +141,20 @@ function App() {
 
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
+
+      // Deliberately e.ctrlKey specifically, not the generic mod pattern —
+      // Cmd+Tab is macOS's own app-switcher and can never be intercepted,
+      // so tab-cycling has to be the literal Ctrl key on every platform,
+      // same as VS Code/Chrome.
+      if (e.ctrlKey && key === 'tab') {
+        e.preventDefault();
+        if (tabs.length === 0) return;
+        const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
+        const direction = e.shiftKey ? -1 : 1;
+        const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
+        setActiveTabId(tabs[nextIndex].id);
+        return;
+      }
 
       if (mod && e.shiftKey && key === 's') {
         e.preventDefault();
@@ -169,7 +199,7 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, activeTabId, quickOpenVisible]);
+  }, [tabs, activeTab, activeTabId, quickOpenVisible]);
 
   return (
     <div className="app retro-theme">
@@ -192,6 +222,7 @@ function App() {
         <div className="editor-panel">
           <Toolbar
             onRun={runCode}
+            onBuild={buildCode}
             onSave={handleSave}
             onNew={newFile}
             onOpenFolder={handleOpenFolder}
@@ -234,6 +265,8 @@ function App() {
             ? '🟢 Ready'
             : runState === 'compiling'
             ? '🟡 Compiling'
+            : runState === 'building'
+            ? '🟡 Building'
             : '🟡 Running'}
         </span>
         <span>C99 Standard</span>

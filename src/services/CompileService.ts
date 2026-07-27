@@ -4,4 +4,8 @@ export class CompileService {
   static async compileAndRun(code: string, filename: string): Promise<void> {
     await invoke("compile_and_run", { code, filename });
   }
+
+  static async build(code: string, filename: string): Promise<void> {
+    await invoke("build_only", { code, filename });
+  }
 }

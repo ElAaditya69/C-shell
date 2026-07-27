@@ -1,7 +1,8 @@
-export type RunState = "idle" | "compiling" | "running";
+export type RunState = "idle" | "compiling" | "running" | "building";
 
 interface ToolbarProps {
   onRun: () => void;
+  onBuild: () => void;
   onSave: () => void;
   onNew: () => void;
   onOpenFolder: () => void;
@@ -12,6 +13,7 @@ interface ToolbarProps {
 
 export function Toolbar({
   onRun,
+  onBuild,
   onSave,
   onNew,
   onOpenFolder,
@@ -19,6 +21,8 @@ export function Toolbar({
   runState,
   currentFile,
 }: ToolbarProps) {
+  const busy = runState !== "idle";
+
   const runLabel =
     runState === "compiling"
       ? "⏳ Compiling..."
@@ -26,16 +30,27 @@ export function Toolbar({
       ? "🟡 Running..."
       : "▶ Run";
 
+  const buildLabel = runState === "building" ? "⏳ Building..." : "🔨 Build";
+
   return (
     <div className="toolbar">
       <div className="toolbar-left">
         <button
-          className={`run-btn ${runState !== "idle" ? "running" : ""}`}
+          className={`run-btn ${busy ? "running" : ""}`}
           onClick={onRun}
-          disabled={runState !== "idle"}
+          disabled={busy}
           title="Run (Ctrl+Enter)"
         >
           {runLabel}
+        </button>
+
+        <button
+          className="tool-btn"
+          onClick={onBuild}
+          disabled={busy}
+          title="Build only, don't run"
+        >
+          {buildLabel}
         </button>
 
         <button className="tool-btn" onClick={onSave} title="Save (Ctrl+S)">
