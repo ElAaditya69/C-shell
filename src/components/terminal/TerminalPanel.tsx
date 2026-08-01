@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { XTermView, XTermHandle } from "./XTermView";
 
 type Mode = "normal" | "minimized" | "maximized" | "closed";
@@ -8,11 +8,21 @@ const MINIMIZED_HEIGHT = 80;
 const CLOSED_HEIGHT = 32;
 const DEFAULT_HEIGHT = 200;
 
-export function TerminalPanel() {
+export interface TerminalPanelHandle {
+  getTerminalBuffer: () => string;
+  clear: () => void;
+}
+
+export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPanel(_, ref) {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [mode, setMode] = useState<Mode>("normal");
   const draggingRef = useRef(false);
   const xtermRef = useRef<XTermHandle>(null);
+
+  useImperativeHandle(ref, () => ({
+    getTerminalBuffer: () => xtermRef.current?.getBufferText() || "",
+    clear: () => xtermRef.current?.clear(),
+  }));
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -123,4 +133,4 @@ export function TerminalPanel() {
       </div>
     </div>
   );
-}
+});

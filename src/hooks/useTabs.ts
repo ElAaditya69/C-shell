@@ -166,6 +166,21 @@ export function useTabs() {
     });
   };
 
+  // Keeps an open tab pointing at the right place after its file gets
+  // renamed on disk. (Folder renames are a known gap — see checklist note.)
+  const renameTabForPath = (oldPath: string, newPath: string) => {
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.path === oldPath
+          ? { ...t, id: newPath, path: newPath, name: newPath.split("/").pop()! }
+          : t
+      )
+    );
+    if (activeTabId === oldPath) {
+      setActiveTabId(newPath);
+    }
+  };
+
   return {
     tabs,
     activeTabId,
@@ -178,5 +193,6 @@ export function useTabs() {
     saveFileAs,
     closeTab,
     removeTabForPath,
+    renameTabForPath,
   };
 }

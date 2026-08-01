@@ -9,6 +9,7 @@ import "xterm/css/xterm.css";
 export interface XTermHandle {
   clear: () => void;
   sendInterrupt: () => void;
+  getBufferText: () => string;
 }
 
 const RUN_DONE_MARKER = "__CSHELL_RUN_DONE__";
@@ -29,6 +30,19 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
       // Clicking Stop already IS the "I'm done" moment; reflect it
       // immediately instead of waiting on a signal that isn't coming.
       window.dispatchEvent(new CustomEvent(RUN_FINISHED_EVENT));
+    },
+    getBufferText: () => {
+      const term = xtermRef.current;
+      if (!term) return "";
+      const activeBuffer = term.buffer.active;
+      const lines: string[] = [];
+      for (let i = 0; i < activeBuffer.length; i++) {
+        const line = activeBuffer.getLine(i);
+        if (line) {
+          lines.push(line.translateToString(true));
+        }
+      }
+      return lines.join("\n").trim();
     },
   }));
 

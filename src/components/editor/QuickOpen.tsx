@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { FileNode } from "../../services/FileService";
 
 interface QuickOpenProps {
-  files: string[];
+  files: FileNode[];
   onSelect: (path: string) => void;
   onClose: () => void;
 }
@@ -11,9 +12,9 @@ export function QuickOpen({ files, onSelect, onClose }: QuickOpenProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const filtered = files.filter((f) =>
-    (f.split("/").pop() || f).toLowerCase().includes(query.toLowerCase())
-  );
+  const filtered = files
+    .filter((f) => !f.is_dir)
+    .filter((f) => f.name.toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -35,7 +36,7 @@ export function QuickOpen({ files, onSelect, onClose }: QuickOpenProps) {
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (filtered[activeIndex]) {
-        onSelect(filtered[activeIndex]);
+        onSelect(filtered[activeIndex].path);
         onClose();
       }
     }
@@ -58,15 +59,15 @@ export function QuickOpen({ files, onSelect, onClose }: QuickOpenProps) {
           ) : (
             filtered.map((file, i) => (
               <div
-                key={file}
+                key={file.path}
                 className={`quick-open-item ${i === activeIndex ? "active" : ""}`}
                 onMouseEnter={() => setActiveIndex(i)}
                 onClick={() => {
-                  onSelect(file);
+                  onSelect(file.path);
                   onClose();
                 }}
               >
-                {file.split("/").pop()}
+                {file.name}
               </div>
             ))
           )}

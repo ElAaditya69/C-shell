@@ -2,21 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { CompileService } from './services/CompileService';
+import { FormatService } from './services/FormatService';
 import { Editor, EditorHandle } from './components/editor/Editor';
 import { TabBar } from './components/editor/TabBar';
 import { QuickOpen } from './components/editor/QuickOpen';
-import { TerminalPanel } from './components/terminal/TerminalPanel';
+import { TerminalPanel, TerminalPanelHandle } from './components/terminal/TerminalPanel';
 import { RUN_FINISHED_EVENT } from './components/terminal/XTermView';
-import { Toolbar, RunState } from './components/toolbar/Toolbar';
+import { Toolbar, ActivityState } from './components/toolbar/Toolbar';
 import { FileTree } from './components/sidebar/FileTree';
+import { ScreenshotModal } from './components/screenshot/ScreenshotModal';
+import { LabReportModal } from './components/report/LabReportModal';
 import { useTabs } from './hooks/useTabs';
 import { useFileExplorer } from './hooks/useFileExplorer';
 import './App.css';
 
 function App() {
-  const [runState, setRunState] = useState<RunState>('idle');
+  const [activityState, setActivityState] = useState<ActivityState>('idle');
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+  const [screenshotModalVisible, setScreenshotModalVisible] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
   const editorRef = useRef<EditorHandle>(null);
+  const terminalRef = useRef<TerminalPanelHandle>(null);
 
   const {
     tabs,
@@ -30,10 +36,22 @@ function App() {
     saveFileAs,
     closeTab,
     removeTabForPath,
+    renameTabForPath,
   } = useTabs();
 
-  const { files, currentDir, loadDirectory, openFolder, openFileDialog, deleteFile } =
-    useFileExplorer();
+  const {
+    files,
+    currentDir,
+    refreshKey,
+    loadDirectory,
+    refresh,
+    openFolder,
+    openFileDialog,
+    deleteFile,
+    createFolder,
+    createFileInFolder,
+    renamePath,
+  } = useFileExplorer();
 
   useEffect(() => {
     loadDirectory('/Users/mac/Desktop');
@@ -56,9 +74,19 @@ function App() {
     saveFileAs(loadDirectory);
   };
 
-  const handleDelete = async (path: string) => {
-    const deleted = await deleteFile(path);
+  const handleDelete = async (path: string, isDir: boolean) => {
+    const deleted = await deleteFile(path, isDir);
     if (deleted) removeTabForPath(path);
+  };
+
+  const handleRename = async (path: string, currentName: string) => {
+    const newPath = await renamePath(path, currentName);
+    if (newPath) renameTabForPath(path, newPath);
+  };
+
+  const handleNewFileInFolder = async (parentPath: string) => {
+    const newPath = await createFileInFolder(parentPath);
+    if (newPath) await openFile(newPath);
   };
 
   const runCode = async () => {
@@ -67,13 +95,13 @@ function App() {
       return;
     }
 
-    setRunState('compiling');
+    setActivityState('compiling');
     try {
       await CompileService.compileAndRun(activeTab.code, activeTab.path);
-      setRunState('running');
+      setActivityState('running');
     } catch (error) {
       alert(`Failed to run: ${error}`);
-      setRunState('idle');
+      setActivityState('idle');
     }
   };
 
@@ -83,20 +111,39 @@ function App() {
       return;
     }
 
-    setRunState('building');
+    setActivityState('building');
     try {
-      // build_only's promise resolves once gcc has genuinely finished —
-      // unlike Run, there's no async hand-off to the terminal afterward,
-      // so no marker/event dance is needed here.
       await CompileService.build(activeTab.code, activeTab.path);
     } catch (error) {
       alert(`Failed to build: ${error}`);
     }
-    setRunState('idle');
+    setActivityState('idle');
+  };
+
+  const formatCode = async () => {
+    if (!activeTab) {
+      alert('Open a C file before formatting.');
+      return;
+    }
+
+    setActivityState('formatting');
+
+    try {
+      const formattedCode = await FormatService.format(
+        activeTab.code,
+        activeTab.name
+      );
+
+      updateActiveCode(formattedCode);
+    } catch (error) {
+      alert(`Failed to format: ${error}`);
+    }
+
+    setActivityState('idle');
   };
 
   useEffect(() => {
-    const handleRunFinished = () => setRunState('idle');
+    const handleRunFinished = () => setActivityState('idle');
     window.addEventListener(RUN_FINISHED_EVENT, handleRunFinished);
     return () => window.removeEventListener(RUN_FINISHED_EVENT, handleRunFinished);
   }, []);
@@ -106,9 +153,6 @@ function App() {
     tabsRef.current = tabs;
   }, [tabs]);
 
-  // The Rust side intercepts every quit path (red button, Cmd+Q, Quit
-  // menu) and always prevents it first, then asks us here whether it's
-  // actually OK to proceed.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
@@ -142,10 +186,6 @@ function App() {
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
 
-      // Deliberately e.ctrlKey specifically, not the generic mod pattern —
-      // Cmd+Tab is macOS's own app-switcher and can never be intercepted,
-      // so tab-cycling has to be the literal Ctrl key on every platform,
-      // same as VS Code/Chrome.
       if (e.ctrlKey && key === 'tab') {
         e.preventDefault();
         if (tabs.length === 0) return;
@@ -156,9 +196,24 @@ function App() {
         return;
       }
 
+      if (mod && e.altKey && key === 's') {
+        e.preventDefault();
+        setScreenshotModalVisible(true);
+        return;
+      }
+      if (mod && e.altKey && key === 'r') {
+        e.preventDefault();
+        setReportModalVisible(true);
+        return;
+      }
       if (mod && e.shiftKey && key === 's') {
         e.preventDefault();
         handleSaveAs();
+        return;
+      }
+      if (mod && e.shiftKey && key === 'f') {
+        e.preventDefault();
+        formatCode();
         return;
       }
       if (mod && key === 's') {
@@ -213,21 +268,29 @@ function App() {
           files={files}
           currentFile={activeTab?.path ?? null}
           currentDir={currentDir}
+          refreshKey={refreshKey}
           onFileSelect={openFile}
           onNewFile={newFile}
           onOpenFolder={handleOpenFolder}
-          onDeleteFile={handleDelete}
+          onRefresh={refresh}
+          onDeleteNode={handleDelete}
+          onRenameNode={handleRename}
+          onNewFolder={createFolder}
+          onNewFileInFolder={handleNewFileInFolder}
         />
 
         <div className="editor-panel">
           <Toolbar
             onRun={runCode}
             onBuild={buildCode}
+            onFormat={formatCode}
+            onScreenshot={() => setScreenshotModalVisible(true)}
+            onReport={() => setReportModalVisible(true)}
             onSave={handleSave}
             onNew={newFile}
             onOpenFolder={handleOpenFolder}
             onOpenFile={handleOpenFile}
-            runState={runState}
+            activityState={activityState}
             currentFile={activeTab?.path ?? null}
           />
 
@@ -253,7 +316,7 @@ function App() {
             )}
           </div>
 
-          <TerminalPanel />
+          <TerminalPanel ref={terminalRef} />
         </div>
       </div>
 
@@ -261,12 +324,14 @@ function App() {
         <span>📁 {activeTab?.path || 'No file'}</span>
         <span>{currentDir || 'No folder'}</span>
         <span>
-          {runState === 'idle'
+          {activityState === 'idle'
             ? '🟢 Ready'
-            : runState === 'compiling'
+            : activityState === 'compiling'
             ? '🟡 Compiling'
-            : runState === 'building'
+            : activityState === 'building'
             ? '🟡 Building'
+            : activityState === 'formatting'
+            ? '🟡 Formatting'
             : '🟡 Running'}
         </span>
         <span>C99 Standard</span>
@@ -277,6 +342,23 @@ function App() {
           files={files}
           onSelect={openFile}
           onClose={() => setQuickOpenVisible(false)}
+        />
+      )}
+
+      {screenshotModalVisible && activeTab && (
+        <ScreenshotModal
+          code={activeTab.code}
+          fileName={activeTab.name || 'main.c'}
+          onClose={() => setScreenshotModalVisible(false)}
+        />
+      )}
+
+      {reportModalVisible && (
+        <LabReportModal
+          code={activeTab?.code || ''}
+          fileName={activeTab?.name || 'main.c'}
+          terminalOutput={terminalRef.current?.getTerminalBuffer() || ''}
+          onClose={() => setReportModalVisible(false)}
         />
       )}
     </div>
