@@ -20,6 +20,11 @@ export interface AppSettings {
   activeTabPath: string | null;
   recentProjects: string[];
   recentFiles: string[];
+  showToolbar: boolean;
+  showStatusBar: boolean;
+  explorerPosition: 'left' | 'right';
+  terminalPosition: 'bottom' | 'right';
+  userCss: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -40,6 +45,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   activeTabPath: null,
   recentProjects: [],
   recentFiles: [],
+  showToolbar: true,
+  showStatusBar: true,
+  explorerPosition: "left",
+  terminalPosition: "bottom",
+  userCss: "",
 };
 
 interface SettingsContextType {

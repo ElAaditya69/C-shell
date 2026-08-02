@@ -225,6 +225,60 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               Indent using Hard Tabs (instead of Spaces)
             </label>
           </div>
+          {/* Layout & UI Customization */}
+          <div className="include-toggles" style={{ marginTop: "14px" }}>
+            <label style={{ cursor: "pointer", marginBottom: "6px", display: "block" }}>
+              <input
+                type="checkbox"
+                checked={settings.showToolbar}
+                onChange={(e) =>
+                  updateSettings({ showToolbar: e.target.checked })
+                }
+              />
+              Show Top Toolbar
+            </label>
+            <label style={{ cursor: "pointer", display: "block" }}>
+              <input
+                type="checkbox"
+                checked={settings.showStatusBar}
+                onChange={(e) =>
+                  updateSettings({ showStatusBar: e.target.checked })
+                }
+              />
+              Show Bottom Status Bar
+            </label>
+          </div>
+
+          {/* Theme Import / Export */}
+          <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
+            <button
+              className="action-btn secondary"
+              onClick={() => {
+                const data = JSON.stringify(settings, null, 2);
+                navigator.clipboard.writeText(data);
+                alert("Settings exported to clipboard!");
+              }}
+            >
+              📤 Export Settings
+            </button>
+            <button
+              className="action-btn secondary"
+              onClick={() => {
+                const input = prompt("Paste exported settings JSON:");
+                if (input) {
+                  try {
+                    const parsed = JSON.parse(input);
+                    updateSettings(parsed);
+                    alert("Settings imported successfully!");
+                  } catch (e) {
+                    alert("Invalid JSON data!");
+                  }
+                }
+              }}
+            >
+              📥 Import Settings
+            </button>
+          </div>
         </div>
 
         <div className="modal-actions">

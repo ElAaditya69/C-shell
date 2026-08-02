@@ -397,20 +397,22 @@ function App() {
         />
 
         <div className="editor-panel">
-          <Toolbar
-            onRun={runCode}
-            onBuild={buildCode}
-            onFormat={formatCode}
-            onScreenshot={() => setScreenshotModalVisible(true)}
-            onReport={() => setReportModalVisible(true)}
-            onSave={handleSave}
-            onNew={newFile}
-            onOpenFolder={handleOpenFolder}
-            onOpenFile={handleOpenFile}
-            onOpenSettings={() => setSettingsModalVisible(true)}
-            activityState={activityState}
-            currentFile={activeTab?.path ?? null}
-          />
+          {settings.showToolbar !== false && (
+            <Toolbar
+              onRun={runCode}
+              onBuild={buildCode}
+              onFormat={formatCode}
+              onScreenshot={() => setScreenshotModalVisible(true)}
+              onReport={() => setReportModalVisible(true)}
+              onSave={handleSave}
+              onNew={newFile}
+              onOpenFolder={handleOpenFolder}
+              onOpenFile={handleOpenFile}
+              onOpenSettings={() => setSettingsModalVisible(true)}
+              activityState={activityState}
+              currentFile={activeTab?.path ?? null}
+            />
+          )}
 
           <div className="editor-wrapper">
             <TabBar
@@ -441,24 +443,26 @@ function App() {
         </div>
       </div>
 
-      <div className="statusbar">
-        <span>📁 {activeTab?.path || 'No file'}</span>
-        <span>{currentDir || 'No folder'}</span>
-        <span>Ln 1, Col 1</span>
-        <span>UTF-8</span>
-        <span>
-          {activityState === 'idle'
-            ? '🟢 Ready'
-            : activityState === 'compiling'
-            ? '🟡 Compiling'
-            : activityState === 'building'
-            ? '🟡 Building'
-            : activityState === 'formatting'
-            ? '🟡 Formatting'
-            : '🟡 Running'}
-        </span>
-        <span>gcc • C99</span>
-      </div>
+      {settings.showStatusBar !== false && (
+        <div className="statusbar">
+          <span>📁 {activeTab?.path || 'No file'}</span>
+          <span>{currentDir || 'No folder'}</span>
+          <span>Ln 1, Col 1</span>
+          <span>UTF-8</span>
+          <span>
+            {activityState === 'idle'
+              ? '🟢 Ready'
+              : activityState === 'compiling'
+              ? '🟡 Compiling'
+              : activityState === 'building'
+              ? '🟡 Building'
+              : activityState === 'formatting'
+              ? '🟡 Formatting'
+              : '🟡 Running'}
+          </span>
+          <span>gcc • C99</span>
+        </div>
+      )}
 
       {quickOpenVisible && (
         <QuickOpen
