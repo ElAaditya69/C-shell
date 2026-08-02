@@ -12,6 +12,7 @@ import { Toolbar, ActivityState } from './components/toolbar/Toolbar';
 import { FileTree } from './components/sidebar/FileTree';
 import { ScreenshotModal } from './components/screenshot/ScreenshotModal';
 import { LabReportModal } from './components/report/LabReportModal';
+import { SettingsModal } from './components/settings/SettingsModal';
 import { useTabs } from './hooks/useTabs';
 import { useFileExplorer } from './hooks/useFileExplorer';
 import './App.css';
@@ -21,6 +22,7 @@ function App() {
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
   const [screenshotModalVisible, setScreenshotModalVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const editorRef = useRef<EditorHandle>(null);
   const terminalRef = useRef<TerminalPanelHandle>(null);
 
@@ -54,7 +56,14 @@ function App() {
   } = useFileExplorer();
 
   useEffect(() => {
-    loadDirectory('/Users/mac/Desktop');
+    (async () => {
+      try {
+        const home = await invoke<string>('get_home_dir');
+        await loadDirectory(home);
+      } catch {
+        // Fallback: stay empty until user opens folder
+      }
+    })();
   }, [loadDirectory]);
 
   const handleOpenFolder = async () => {
@@ -246,6 +255,11 @@ function App() {
         setQuickOpenVisible((v) => !v);
         return;
       }
+      if (mod && key === ',') {
+        e.preventDefault();
+        setSettingsModalVisible(true);
+        return;
+      }
       if (mod && key === '/') {
         e.preventDefault();
         editorRef.current?.toggleComment();
@@ -260,7 +274,7 @@ function App() {
     <div className="app retro-theme">
       <div className="titlebar">
         <span className="logo">⚡ C-SHELL</span>
-        <span className="subtitle">v0.2.0 — Professional Edition</span>
+        <span className="subtitle">v0.3.0 — Professional Edition</span>
       </div>
 
       <div className="main-container">
@@ -290,6 +304,7 @@ function App() {
             onNew={newFile}
             onOpenFolder={handleOpenFolder}
             onOpenFile={handleOpenFile}
+            onOpenSettings={() => setSettingsModalVisible(true)}
             activityState={activityState}
             currentFile={activeTab?.path ?? null}
           />
@@ -360,6 +375,10 @@ function App() {
           terminalOutput={terminalRef.current?.getTerminalBuffer() || ''}
           onClose={() => setReportModalVisible(false)}
         />
+      )}
+
+      {settingsModalVisible && (
+        <SettingsModal onClose={() => setSettingsModalVisible(false)} />
       )}
     </div>
   );

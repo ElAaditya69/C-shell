@@ -5,6 +5,7 @@
   --bg-secondary: #12121a;
   --bg-panel: #1a1a2e;
   --bg-hover: #252540;
+  --bg-deep: #050508;
   --text-primary: #ffb000;
   --text-secondary: #ffcc44;
   --text-dim: #886600;
@@ -14,6 +15,15 @@
   --error: #ff3333;
   --border: #2a2a3e;
   --glow: 0 0 10px rgba(255, 176, 0, 0.3);
+  --btn-run: #d63031;
+  --btn-run-hover: #ff7675;
+  --btn-run-glow: rgba(214, 48, 49, 0.4);
+  --btn-running: #fdcb6e;
+  --btn-primary: #319795;
+  --btn-primary-hover: #2c7a7b;
+  --dot-close: #ff5f56;
+  --dot-minimize: #ffbd2e;
+  --dot-maximize: #27c93f;
 }
 
 * {
@@ -31,7 +41,7 @@ body {
 
 /* ===== TITLE BAR ===== */
 .titlebar {
-  background: linear-gradient(180deg, #1a1a2e 0%, #12121a 100%);
+  background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-secondary) 100%);
   padding: 8px 16px;
   display: flex;
   justify-content: space-between;
@@ -66,7 +76,8 @@ body {
 
 /* ===== FILE TREE ===== */
 .file-tree {
-  width: 220px;
+  position: relative;
+  flex-shrink: 0;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -207,7 +218,7 @@ body {
 }
 
 .run-btn {
-  background: linear-gradient(135deg, #ff7675 0%, #d63031 100%);
+  background: linear-gradient(135deg, var(--btn-run-hover) 0%, var(--btn-run) 100%);
   color: #ffffff;
   border: none;
   padding: 5px 14px;
@@ -224,13 +235,13 @@ body {
 }
 
 .run-btn:hover {
-  box-shadow: 0 3px 10px rgba(214, 48, 49, 0.4);
+  box-shadow: 0 3px 10px var(--btn-run-glow);
   transform: translateY(-1px);
 }
 
 .run-btn.running {
-  background: #fdcb6e;
-  color: #0b0b12;
+  background: var(--btn-running);
+  color: var(--bg-primary);
   cursor: not-allowed;
 }
 
@@ -422,9 +433,9 @@ body {
   cursor: pointer;
 }
 
-.term-btn.close { background: #ff5f56; }
-.term-btn.minimize { background: #ffbd2e; }
-.term-btn.maximize { background: #27c93f; }
+.term-btn.close { background: var(--dot-close); }
+.term-btn.minimize { background: var(--dot-minimize); }
+.term-btn.maximize { background: var(--dot-maximize); }
 
 .terminal-body {
   flex: 1;
@@ -471,24 +482,7 @@ body {
   background: var(--text-dim);
 }
 
-/* ===== SCANLINES EFFECT ===== */
-.app::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0.03),
-    rgba(0, 0, 0, 0.03) 1px,
-    transparent 1px,
-    transparent 2px
-  );
-  pointer-events: none;
-  z-index: 9999;
-}
+/* ===== SCROLLBAR ===== */
 .tab-close {
   margin-left: 2px;
   opacity: 0.5;
@@ -738,13 +732,13 @@ body {
 }
 
 .action-btn.primary {
-  background: #319795;
-  border-color: #319795;
+  background: var(--btn-primary);
+  border-color: var(--btn-primary);
   color: #fff;
 }
 
 .action-btn.primary:hover {
-  background: #2c7a7b;
+  background: var(--btn-primary-hover);
 }
 
 .action-btn.secondary:hover {
@@ -853,9 +847,9 @@ body {
   height: 10px;
   border-radius: 50%;
 }
-.dot.red { background: #ff5f56; }
-.dot.yellow { background: #ffbd2e; }
-.dot.green { background: #27c93f; }
+.dot.red { background: var(--dot-close); }
+.dot.yellow { background: var(--dot-minimize); }
+.dot.green { background: var(--dot-maximize); }
 
 .file-badge {
   font-size: 11px;
@@ -898,7 +892,7 @@ body {
 }
 
 .switch-btn.active {
-  background: #319795;
+  background: var(--btn-primary);
   color: #fff;
 }
 
@@ -962,3 +956,59 @@ body {
   border: none;
 }
 
+
+
+.file-tree-drag-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+}
+
+.file-tree-drag-handle:hover {
+  background: var(--accent, #ffb000);
+  opacity: 0.4;
+}
+
+.file-tree.collapsed {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12px;
+}
+
+.sidebar-expand-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+}
+
+.sidebar-expand-btn:hover {
+  color: var(--accent, #ffb000);
+}
+
+.tools-dropdown-wrapper {
+  position: relative;
+}
+
+.tools-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+}
+
+.tool-btn.subtle {
+  opacity: 0.6;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.tool-btn.subtle:hover {
+  opacity: 1;
+}

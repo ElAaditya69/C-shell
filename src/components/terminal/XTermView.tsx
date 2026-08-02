@@ -49,6 +49,10 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
   useEffect(() => {
     if (!terminalRef.current || xtermRef.current) return;
 
+    const style = getComputedStyle(document.documentElement);
+    const bg = style.getPropertyValue("--bg-primary").trim() || "#0b0b12";
+    const fg = style.getPropertyValue("--text-primary").trim() || "#ffb000";
+
     const term = new XTerm({
       cursorBlink: true,
       fontFamily: "JetBrains Mono, monospace",
@@ -56,9 +60,9 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
       convertEol: true,
       scrollback: 5000,
       theme: {
-        background: "#0b0b12",
-        foreground: "#ffb000",
-        cursor: "#ffb000",
+        background: bg,
+        foreground: fg,
+        cursor: fg,
       },
     });
 

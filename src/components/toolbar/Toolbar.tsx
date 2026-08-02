@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { useSettings } from "../../context/SettingsContext";
+
 export type ActivityState =
   | "idle"
   | "compiling"
@@ -15,6 +18,7 @@ interface ToolbarProps {
   onNew: () => void;
   onOpenFolder: () => void;
   onOpenFile: () => void;
+  onOpenSettings: () => void;
   activityState: ActivityState;
   currentFile: string | null;
 }
@@ -29,28 +33,36 @@ export function Toolbar({
   onNew,
   onOpenFolder,
   onOpenFile,
+  onOpenSettings,
   activityState,
   currentFile,
 }: ToolbarProps) {
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const { settings } = useSettings();
   const busy = activityState !== "idle";
+
+  const showLabels = settings.showToolbarLabels;
 
   const runLabel =
     activityState === "compiling"
-      ? "⏳ Compiling..."
+      ? showLabels ? "⏳ Compiling..." : "⏳"
       : activityState === "running"
-      ? "🟡 Running..."
-      : "▶ Run";
+      ? showLabels ? "🟡 Running..." : "🟡"
+      : showLabels ? "▶ Run" : "▶";
 
   const buildLabel =
-    activityState === "building" ? "⏳ Building..." : "🔨 Build";
+    activityState === "building"
+      ? showLabels ? "⏳ Building..." : "⏳"
+      : showLabels ? "🔨 Build" : "🔨";
 
-  const formatLabel =
-    activityState === "formatting" ? "⏳ Formatting..." : "✨ Format";
+  const toolsAction = (fn: () => void) => () => {
+    fn();
+    setToolsOpen(false);
+  };
 
   return (
     <div className="toolbar">
       <div className="toolbar-left">
-        {/* Execution Group */}
         <div className="toolbar-group">
           <button
             className={`run-btn ${busy ? "running" : ""}`}
@@ -73,56 +85,52 @@ export function Toolbar({
 
         <div className="toolbar-divider" />
 
-        {/* Tools Group */}
-        <div className="toolbar-group">
+        <div className="toolbar-group tools-dropdown-wrapper">
           <button
             className="tool-btn"
-            onClick={onFormat}
-            disabled={busy}
-            title="Format Document (Ctrl/Cmd+Shift+F)"
+            onClick={() => setToolsOpen((v) => !v)}
+            title="Format, Snapshot, Lab Report"
           >
-            {formatLabel}
+            {activityState === "formatting"
+              ? showLabels ? "⏳ Formatting..." : "⏳"
+              : showLabels ? "🛠️ Tools ▾" : "🛠️ ▾"}
           </button>
 
-          <button
-            className="tool-btn"
-            onClick={onScreenshot}
-            title="Code Screenshot (Ctrl/Cmd+Alt+S)"
-          >
-            📸 Snapshot
-          </button>
-
-          <button
-            className="tool-btn"
-            onClick={onReport}
-            title="Generate Lab Report (Ctrl/Cmd+Alt+R)"
-          >
-            📄 Lab Report
-          </button>
+          {toolsOpen && (
+            <>
+              <div
+                className="context-menu-backdrop"
+                onClick={() => setToolsOpen(false)}
+              />
+              <div className="context-menu tools-menu">
+                <button onClick={toolsAction(onFormat)} disabled={busy}>
+                  ✨ Format (Ctrl+Shift+F)
+                </button>
+                <button onClick={toolsAction(onScreenshot)}>
+                  📸 Snapshot (Ctrl+Alt+S)
+                </button>
+                <button onClick={toolsAction(onReport)}>
+                  📄 Lab Report (Ctrl+Alt+R)
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="toolbar-divider" />
 
-        {/* File Actions Group */}
         <div className="toolbar-group">
-          <button className="tool-btn icon-btn" onClick={onSave} title="Save File (Ctrl/Cmd+S)">
-            💾 Save
+          <button className="tool-btn subtle" onClick={onSave} title="Save File (Ctrl/Cmd+S)">
+            💾 {showLabels && "Save"}
           </button>
-
-          <button className="tool-btn icon-btn" onClick={onNew} title="New File (Ctrl/Cmd+N)">
-            📝 New
+          <button className="tool-btn subtle" onClick={onNew} title="New File (Ctrl/Cmd+N)">
+            📝 {showLabels && "New"}
           </button>
-
-          <button
-            className="tool-btn icon-btn"
-            onClick={onOpenFolder}
-            title="Open Folder (Ctrl/Cmd+O)"
-          >
-            📁 Folder
+          <button className="tool-btn subtle" onClick={onOpenFolder} title="Open Folder (Ctrl/Cmd+O)">
+            📁 {showLabels && "Folder"}
           </button>
-
-          <button className="tool-btn icon-btn" onClick={onOpenFile} title="Open File">
-            📄 File
+          <button className="tool-btn subtle" onClick={onOpenFile} title="Open File">
+            📄 {showLabels && "File"}
           </button>
         </div>
       </div>
@@ -132,6 +140,14 @@ export function Toolbar({
           <span className="file-label">📄 {currentFile.split("/").pop()}</span>
         )}
         <span className="badge">C99</span>
+        <button
+          className="icon-action-btn"
+          onClick={onOpenSettings}
+          title="Preferences (Ctrl/Cmd+,)"
+          style={{ fontSize: "14px", marginLeft: "4px" }}
+        >
+          ⚙️
+        </button>
       </div>
     </div>
   );

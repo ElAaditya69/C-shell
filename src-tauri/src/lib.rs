@@ -23,7 +23,10 @@ pub fn run() {
             start_terminal,
             send_command,
             resize_terminal,
-            confirm_quit
+            confirm_quit,
+            get_home_dir,
+            load_settings,
+            save_settings
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -26,17 +26,16 @@ impl PtyManager {
             })
             .map_err(|e| e.to_string())?;
 
-#[cfg(target_os = "windows")]
-let mut cmd = {
-    CommandBuilder::new("cmd.exe")
-};
+        #[cfg(target_os = "windows")]
+        let mut cmd = CommandBuilder::new("cmd.exe");
 
-#[cfg(not(target_os = "windows"))]
-let mut cmd = {
-    let mut command = CommandBuilder::new("/bin/zsh");
-    command.arg("-l");
-    command
-};
+        #[cfg(not(target_os = "windows"))]
+        let mut cmd = {
+            let default_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+            let mut command = CommandBuilder::new(default_shell);
+            command.arg("-l");
+            command
+        };
 
         
         cmd.env("TERM", "xterm-256color");

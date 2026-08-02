@@ -1,6 +1,6 @@
 [package]
 name = "c-shell"
-version = "0.2.1"
+version = "0.3.0"
 description = "A C programming IDE with retro terminal theme"
 authors = ["Aaditya"]
 edition = "2021"

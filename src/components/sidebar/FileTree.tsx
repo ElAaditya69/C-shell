@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileNode } from "../../services/FileService";
 import { FileTreeNode } from "./FileTreeNode";
 import { ContextMenu } from "./ContextMenu";
+import { useSettings } from "../../context/SettingsContext";
 
 interface FileTreeProps {
   files: FileNode[];
@@ -17,6 +18,10 @@ interface FileTreeProps {
   onNewFolder: (parentPath: string) => void;
   onNewFileInFolder: (parentPath: string) => void;
 }
+
+const MIN_WIDTH = 160;
+const MAX_WIDTH = 480;
+const COLLAPSED_WIDTH = 32;
 
 export function FileTree({
   files,
@@ -35,13 +40,63 @@ export function FileTree({
   const [menu, setMenu] = useState<{ x: number; y: number; node: FileNode } | null>(
     null
   );
+  const { settings, updateSettings } = useSettings();
+  const [width, setWidth] = useState(settings.sidebarWidth || 220);
+  const [collapsed, setCollapsed] = useState(false);
+  const draggingRef = useRef(false);
+  const widthRef = useRef(width);
+  widthRef.current = width;
+
+  useEffect(() => {
+    if (settings.sidebarWidth) {
+      setWidth(settings.sidebarWidth);
+    }
+  }, [settings.sidebarWidth]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!draggingRef.current) return;
+      setWidth(Math.min(Math.max(e.clientX, MIN_WIDTH), MAX_WIDTH));
+    };
+    const onUp = () => {
+      if (draggingRef.current) {
+        draggingRef.current = false;
+        updateSettings({ sidebarWidth: widthRef.current });
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [updateSettings]);
+
+  const startDrag = (e: React.MouseEvent) => {
+    draggingRef.current = true;
+    e.preventDefault();
+  };
 
   const openContextMenu = (e: React.MouseEvent, node: FileNode) => {
     setMenu({ x: e.clientX, y: e.clientY, node });
   };
 
+  if (collapsed) {
+    return (
+      <div className="file-tree collapsed" style={{ width: COLLAPSED_WIDTH }}>
+        <button
+          className="sidebar-expand-btn"
+          onClick={() => setCollapsed(false)}
+          title="Show Explorer"
+        >
+          »
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="file-tree">
+    <div className="file-tree" style={{ width }}>
       <div className="file-tree-header">
         <span className="explorer-title">📂 EXPLORER</span>
         <div className="file-tree-header-actions">
@@ -65,6 +120,13 @@ export function FileTree({
             title="Refresh Explorer"
           >
             🔄
+          </button>
+          <button
+            className="icon-action-btn"
+            onClick={() => setCollapsed(true)}
+            title="Collapse Explorer"
+          >
+            «
           </button>
         </div>
       </div>
@@ -91,6 +153,8 @@ export function FileTree({
           ))
         )}
       </div>
+
+      <div className="file-tree-drag-handle" onMouseDown={startDrag} />
 
       {menu && (
         <ContextMenu

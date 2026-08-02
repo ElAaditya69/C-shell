@@ -1,12 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { XTermView, XTermHandle } from "./XTermView";
+import { useSettings } from "../../context/SettingsContext";
 
 type Mode = "normal" | "minimized" | "maximized" | "closed";
 
 const MIN_HEIGHT = 120;
 const MINIMIZED_HEIGHT = 80;
 const CLOSED_HEIGHT = 32;
-const DEFAULT_HEIGHT = 200;
 
 export interface TerminalPanelHandle {
   getTerminalBuffer: () => string;
@@ -14,15 +14,24 @@ export interface TerminalPanelHandle {
 }
 
 export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPanel(_, ref) {
-  const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const { settings, updateSettings } = useSettings();
+  const [height, setHeight] = useState(settings.terminalHeight || 200);
   const [mode, setMode] = useState<Mode>("normal");
   const draggingRef = useRef(false);
+  const heightRef = useRef(height);
+  heightRef.current = height;
   const xtermRef = useRef<XTermHandle>(null);
 
   useImperativeHandle(ref, () => ({
     getTerminalBuffer: () => xtermRef.current?.getBufferText() || "",
     clear: () => xtermRef.current?.clear(),
   }));
+
+  useEffect(() => {
+    if (settings.terminalHeight) {
+      setHeight(settings.terminalHeight);
+    }
+  }, [settings.terminalHeight]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -32,7 +41,10 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPa
       setHeight(Math.min(Math.max(next, MIN_HEIGHT), maxHeight));
     };
     const onUp = () => {
-      draggingRef.current = false;
+      if (draggingRef.current) {
+        draggingRef.current = false;
+        updateSettings({ terminalHeight: heightRef.current });
+      }
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -40,7 +52,7 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPa
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, []);
+  }, [updateSettings]);
 
   const startDrag = (e: React.MouseEvent) => {
     if (mode !== "normal") return;

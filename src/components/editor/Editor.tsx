@@ -11,6 +11,7 @@ import {
 } from '@codemirror/search';
 import { keymap } from '@codemirror/view';
 import type { EditorView } from '@codemirror/view';
+import { useSettings } from '../../context/SettingsContext';
 
 interface EditorProps {
   code: string;
@@ -26,6 +27,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   ref
 ) {
   const viewRef = useRef<EditorView | null>(null);
+  const { settings } = useSettings();
 
   useImperativeHandle(ref, () => ({
     toggleComment: () => {
@@ -37,7 +39,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   }));
 
   return (
-    <div className="editor-container">
+    <div className="editor-container" style={{ fontSize: `${settings.editorFontSize}px` }}>
       <CodeMirror
         value={code}
         height="100%"
