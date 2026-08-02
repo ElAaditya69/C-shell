@@ -31,6 +31,8 @@ export interface EditorHandle {
   toggleBlockComment: () => void;
   jumpToPosition: (line: number, col: number) => void;
   openSymbolPicker: () => void;
+  toggleBookmark: () => void;
+  nextBookmark: () => void;
 }
 
 interface SymbolItem {
@@ -93,6 +95,28 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     }
   };
 
+  const [bookmarks, setBookmarks] = useState<number[]>([]);
+
+  const toggleBookmark = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const currentLine = view.state.doc.lineAt(view.state.selection.main.head).number;
+    setBookmarks((prev) =>
+      prev.includes(currentLine)
+        ? prev.filter((l) => l !== currentLine)
+        : [...prev, currentLine].sort((a, b) => a - b)
+    );
+  };
+
+  const nextBookmark = () => {
+    if (bookmarks.length === 0) return;
+    const view = viewRef.current;
+    if (!view) return;
+    const currentLine = view.state.doc.lineAt(view.state.selection.main.head).number;
+    const nextLine = bookmarks.find((l) => l > currentLine) || bookmarks[0];
+    jumpToLineNum(nextLine);
+  };
+
   useImperativeHandle(ref, () => ({
     toggleComment: () => {
       const view = viewRef.current;
@@ -124,6 +148,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     openSymbolPicker: () => {
       setSymbolModalOpen(true);
     },
+    toggleBookmark,
+    nextBookmark,
   }));
 
   const indentExtension = settings.useTabsIndent

@@ -334,6 +334,8 @@ function App() {
     { id: 'search-files', label: '🔍 Search & Replace in Workspace', category: 'Navigation', shortcut: 'Ctrl+Shift+F', perform: () => setSearchModalVisible(true) },
     { id: 'clean-build', label: '🧹 Clean Build Artifacts', category: 'Build', perform: () => CompileService.cleanBuild() },
     { id: 'rebuild', label: '🔄 Rebuild Workspace', category: 'Build', perform: buildCode },
+    { id: 'toggle-bookmark', label: '🔖 Toggle Line Bookmark', category: 'Navigation', shortcut: 'Ctrl+F2', perform: () => editorRef.current?.toggleBookmark() },
+    { id: 'next-bookmark', label: '🔖 Jump to Next Bookmark', category: 'Navigation', shortcut: 'F2', perform: () => editorRef.current?.nextBookmark() },
   ];
 
   return (

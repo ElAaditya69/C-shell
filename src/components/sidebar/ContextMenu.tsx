@@ -48,6 +48,14 @@ export function ContextMenu({
         >
           📋 Copy Path
         </button>
+        <button
+          onClick={action(() => {
+            const parentDir = node.path.substring(0, node.path.lastIndexOf("/"));
+            navigator.clipboard.writeText(parentDir || node.path);
+          })}
+        >
+          📂 Copy Containing Folder Path
+        </button>
         <button onClick={action(onDelete)} className="danger">
           🗑️ Delete
         </button>
