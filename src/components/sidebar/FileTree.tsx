@@ -21,7 +21,6 @@ interface FileTreeProps {
 
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
-const COLLAPSED_WIDTH = 36;
 
 export function FileTree({
   files,
@@ -112,30 +111,13 @@ export function FileTree({
 
   if (collapsed) {
     return (
-      <div
-        className="file-tree collapsed"
-        style={{
-          width: COLLAPSED_WIDTH,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          paddingTop: "12px",
-          background: "var(--bg-secondary)",
-          borderRight: "1px solid var(--border)",
-        }}
-      >
+      <div className="file-tree collapsed">
         <button
-          className="icon-action-btn"
+          className="sidebar-expand-btn"
           onClick={() => setCollapsed(false)}
-          title="Expand Sidebar (Click to restore)"
-          style={{
-            fontSize: "16px",
-            color: "var(--accent)",
-            padding: "8px",
-            cursor: "pointer",
-          }}
+          title="Expand Explorer Sidebar (Click to restore)"
         >
-          »
+          📂 »
         </button>
       </div>
     );

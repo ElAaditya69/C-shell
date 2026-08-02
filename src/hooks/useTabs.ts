@@ -10,13 +10,7 @@ export interface OpenTab {
   savedCode: string;
 }
 
-const STARTER_CODE = `#include <stdio.h>
-
-int main() {
-    printf("Hello, World!\\n");
-    return 0;
-}
-`;
+const STARTER_CODE = "";
 
 export function useTabs() {
   const [tabs, setTabs] = useState<OpenTab[]>([]);

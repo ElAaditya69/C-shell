@@ -982,22 +982,30 @@ body {
 }
 
 .file-tree.collapsed {
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 12px;
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 10px;
+  background: var(--bg-secondary);
 }
 
 .sidebar-expand-btn {
-  background: none;
-  border: none;
-  color: var(--text-dim);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  color: var(--accent, #ff6b35);
   cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
+  font-size: 15px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
 }
 
 .sidebar-expand-btn:hover {
-  color: var(--accent, #ffb000);
+  background: var(--accent, #ff6b35);
+  color: #ffffff;
+  border-color: var(--accent, #ff6b35);
 }
 
 .tools-dropdown-wrapper {
