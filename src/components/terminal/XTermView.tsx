@@ -4,6 +4,8 @@ import { FitAddon } from "xterm-addon-fit";
 import { listen } from "@tauri-apps/api/event";
 import { FileService } from "../../services/FileService";
 
+import { useSettings } from "../../context/SettingsContext";
+
 import "xterm/css/xterm.css";
 
 export interface XTermHandle {
@@ -18,6 +20,7 @@ export const RUN_FINISHED_EVENT = "cshell:run-finished";
 export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
+  const { settings } = useSettings();
 
   useImperativeHandle(ref, () => ({
     clear: () => xtermRef.current?.clear(),
@@ -25,10 +28,6 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
       FileService.sendCommand("\x03").catch((err) =>
         console.error("Failed to send interrupt:", err)
       );
-      // Ctrl+C kills the ENTIRE chained run command, including the
-      // trailing "done" marker echo — so that marker will never arrive.
-      // Clicking Stop already IS the "I'm done" moment; reflect it
-      // immediately instead of waiting on a signal that isn't coming.
       window.dispatchEvent(new CustomEvent(RUN_FINISHED_EVENT));
     },
     getBufferText: () => {
@@ -47,6 +46,15 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
   }));
 
   useEffect(() => {
+    if (xtermRef.current) {
+      xtermRef.current.options.fontSize = settings.terminalFontSize || 14;
+      if (settings.terminalFontFamily) {
+        xtermRef.current.options.fontFamily = settings.terminalFontFamily;
+      }
+    }
+  }, [settings.terminalFontSize, settings.terminalFontFamily]);
+
+  useEffect(() => {
     if (!terminalRef.current || xtermRef.current) return;
 
     const style = getComputedStyle(document.documentElement);
@@ -55,8 +63,8 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
 
     const term = new XTerm({
       cursorBlink: true,
-      fontFamily: "JetBrains Mono, monospace",
-      fontSize: 14,
+      fontFamily: settings.terminalFontFamily || "JetBrains Mono, monospace",
+      fontSize: settings.terminalFontSize || 14,
       convertEol: true,
       scrollback: 5000,
       theme: {
@@ -64,6 +72,19 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
         foreground: fg,
         cursor: fg,
       },
+    });
+
+    term.attachCustomKeyEventHandler((arg) => {
+      if (arg.ctrlKey && arg.shiftKey && arg.code === 'KeyC') {
+        const sel = term.getSelection();
+        if (sel) navigator.clipboard.writeText(sel);
+        return false;
+      }
+      if (arg.ctrlKey && arg.shiftKey && arg.code === 'KeyV') {
+        navigator.clipboard.readText().then((txt) => FileService.sendCommand(txt));
+        return false;
+      }
+      return true;
     });
 
     const fitAddon = new FitAddon();

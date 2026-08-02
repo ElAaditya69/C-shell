@@ -111,6 +111,24 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             />
           </div>
 
+          {/* Terminal Options */}
+          <div className="form-group span-2" style={{ marginBottom: "16px" }}>
+            <label style={{ fontWeight: 600 }}>
+              Terminal Font Size: {settings.terminalFontSize || 14}px
+            </label>
+            <input
+              type="range"
+              min={10}
+              max={24}
+              step={1}
+              value={settings.terminalFontSize || 14}
+              onChange={(e) =>
+                updateSettings({ terminalFontSize: Number(e.target.value) })
+              }
+              style={{ marginTop: "6px" }}
+            />
+          </div>
+
           {/* Toolbar Options */}
           <div className="include-toggles" style={{ marginTop: "10px" }}>
             <label style={{ cursor: "pointer" }}>

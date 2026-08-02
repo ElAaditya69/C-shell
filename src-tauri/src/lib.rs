@@ -26,7 +26,8 @@ pub fn run() {
             confirm_quit,
             get_home_dir,
             load_settings,
-            save_settings
+            save_settings,
+            clean_build
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

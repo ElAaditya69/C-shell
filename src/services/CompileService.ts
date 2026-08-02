@@ -8,4 +8,8 @@ export class CompileService {
   static async build(code: string, filename: string): Promise<void> {
     await invoke("build_only", { code, filename });
   }
+
+  static async cleanBuild(): Promise<void> {
+    await invoke("clean_build");
+  }
 }

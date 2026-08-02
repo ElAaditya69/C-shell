@@ -207,3 +207,16 @@ pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result
 
     Ok(())
 }
+
+#[command]
+pub fn clean_build(app: AppHandle) -> Result<(), String> {
+    let dir = temp_dir();
+    if dir.exists() {
+        let _ = fs::remove_dir_all(&dir);
+    }
+    let _ = app.emit(
+        TERMINAL_OUTPUT_EVENT,
+        "\x1b[32m🧹 Build artifacts cleaned successfully.\x1b[0m\r\n".to_string(),
+    );
+    Ok(())
+}
