@@ -44,6 +44,9 @@ function App() {
     closeTab,
     removeTabForPath,
     renameTabForPath,
+    hasCrashBackup,
+    restoreCrashBackup,
+    dismissCrashBackup,
   } = useTabs();
 
   const {
@@ -333,6 +336,43 @@ function App() {
         <span className="logo">⚡ C-SHELL</span>
         <span className="subtitle">v0.3.0 — Professional Edition</span>
       </div>
+
+      {hasCrashBackup && (
+        <div
+          className="crash-recovery-banner"
+          style={{
+            background: "var(--accent)",
+            color: "#fff",
+            padding: "8px 16px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            fontSize: "13px",
+            fontWeight: 600,
+          }}
+        >
+          <span>
+            ⚠️ Unsaved changes from a previous session were found. Would you like
+            to restore them?
+          </span>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              className="action-btn primary"
+              onClick={restoreCrashBackup}
+              style={{ padding: "4px 12px", fontSize: "12px" }}
+            >
+              Restore
+            </button>
+            <button
+              className="action-btn secondary"
+              onClick={dismissCrashBackup}
+              style={{ padding: "4px 12px", fontSize: "12px" }}
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="main-container">
         <FileTree

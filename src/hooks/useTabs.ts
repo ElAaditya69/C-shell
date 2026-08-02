@@ -45,6 +45,78 @@ export function useTabs() {
     return () => clearInterval(interval);
   }, [tabs, settings.autosave]);
 
+  const [hasCrashBackup, setHasCrashBackup] = useState(false);
+  const crashBackupData = useRef<OpenTab[] | null>(null);
+
+  // Check for crash backup on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("c_shell_crash_backup");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          crashBackupData.current = parsed;
+          setHasCrashBackup(true);
+        }
+      }
+    } catch {
+      // Ignore invalid localStorage
+    }
+  }, []);
+
+  // Backup dirty tabs to localStorage
+  useEffect(() => {
+    const dirty = tabs.filter((t) => t.code !== t.savedCode);
+    if (dirty.length > 0) {
+      localStorage.setItem("c_shell_crash_backup", JSON.stringify(dirty));
+    } else {
+      localStorage.removeItem("c_shell_crash_backup");
+    }
+  }, [tabs]);
+
+  // External file change detection on window focus
+  useEffect(() => {
+    const handleFocus = async () => {
+      tabs.forEach(async (tab) => {
+        if (!tab.path) return;
+        try {
+          const diskContent = await FileService.readFile(tab.path);
+          if (diskContent !== tab.savedCode) {
+            if (tab.code === tab.savedCode) {
+              // Auto-reload clean files
+              setTabs((prev) =>
+                prev.map((t) =>
+                  t.id === tab.id
+                    ? { ...t, code: diskContent, savedCode: diskContent }
+                    : t
+                )
+              );
+            } else {
+              // Prompt if file has local edits as well as disk changes
+              const reload = confirm(
+                `File "${tab.name}" was modified externally. Reload from disk and discard local changes?`
+              );
+              if (reload) {
+                setTabs((prev) =>
+                  prev.map((t) =>
+                    t.id === tab.id
+                      ? { ...t, code: diskContent, savedCode: diskContent }
+                      : t
+                  )
+                );
+              }
+            }
+          }
+        } catch {
+          // File might have been deleted externally
+        }
+      });
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [tabs]);
+
   useEffect(() => {
     const validPaths = tabs.map((t) => t.path).filter((p): p is string => Boolean(p));
     const activePath = activeTab?.path || null;
@@ -217,6 +289,20 @@ export function useTabs() {
     }
   };
 
+  const restoreCrashBackup = () => {
+    if (crashBackupData.current && crashBackupData.current.length > 0) {
+      setTabs(crashBackupData.current);
+      setActiveTabId(crashBackupData.current[0].id);
+    }
+    localStorage.removeItem("c_shell_crash_backup");
+    setHasCrashBackup(false);
+  };
+
+  const dismissCrashBackup = () => {
+    localStorage.removeItem("c_shell_crash_backup");
+    setHasCrashBackup(false);
+  };
+
   return {
     tabs,
     activeTabId,
@@ -230,5 +316,8 @@ export function useTabs() {
     closeTab,
     removeTabForPath,
     renameTabForPath,
+    hasCrashBackup,
+    restoreCrashBackup,
+    dismissCrashBackup,
   };
 }
