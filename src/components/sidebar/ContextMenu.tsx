@@ -8,6 +8,7 @@ interface ContextMenuProps {
   onDelete: () => void;
   onNewFile: () => void;
   onNewFolder: () => void;
+  onPinFolder?: () => void;
   onClose: () => void;
 }
 
@@ -19,6 +20,7 @@ export function ContextMenu({
   onDelete,
   onNewFile,
   onNewFolder,
+  onPinFolder,
   onClose,
 }: ContextMenuProps) {
   const action = (fn: () => void) => () => {
@@ -34,6 +36,7 @@ export function ContextMenu({
           <>
             <button onClick={action(onNewFile)}>📄 New File</button>
             <button onClick={action(onNewFolder)}>📁 New Folder</button>
+            {onPinFolder && <button onClick={action(onPinFolder)}>📌 Pin to Favorites</button>}
             <div className="context-menu-divider" />
           </>
         )}
