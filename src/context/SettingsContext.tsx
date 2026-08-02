@@ -8,6 +8,8 @@ export interface AppSettings {
   terminalHeight: number;
   showToolbarLabels: boolean;
   editorFontSize: number;
+  fontFamily: string;
+  useTabsIndent: boolean;
   tabSize: number;
   wordWrap: boolean;
   autosave: boolean;
@@ -23,6 +25,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   terminalHeight: 200,
   showToolbarLabels: true,
   editorFontSize: 14,
+  fontFamily: "Fira Code, JetBrains Mono, Menlo, Consolas, monospace",
+  useTabsIndent: false,
   tabSize: 4,
   wordWrap: true,
   autosave: false,

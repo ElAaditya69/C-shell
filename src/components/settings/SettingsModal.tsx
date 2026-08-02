@@ -153,9 +153,40 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             />
           </div>
 
-          {/* Word Wrap */}
+          {/* Font Family */}
+          <div className="form-group span-2" style={{ marginBottom: "16px", marginTop: "14px" }}>
+            <label style={{ fontWeight: 600 }}>Editor Font Family</label>
+            <select
+              value={settings.fontFamily}
+              onChange={(e) => updateSettings({ fontFamily: e.target.value })}
+              style={{
+                width: "100%",
+                padding: "8px",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                background: "var(--bg-primary)",
+                color: "var(--text-primary)",
+                marginTop: "6px",
+              }}
+            >
+              <option value="Fira Code, JetBrains Mono, Menlo, Consolas, monospace">
+                Fira Code / JetBrains Mono
+              </option>
+              <option value="Menlo, Monaco, 'Courier New', monospace">
+                Menlo / Monaco
+              </option>
+              <option value="'Courier New', Courier, monospace">
+                Courier New
+              </option>
+              <option value="Consolas, 'Liberation Mono', monospace">
+                Consolas
+              </option>
+            </select>
+          </div>
+
+          {/* Word Wrap & Indent Toggles */}
           <div className="include-toggles" style={{ marginTop: "10px" }}>
-            <label style={{ cursor: "pointer" }}>
+            <label style={{ cursor: "pointer", marginBottom: "6px", display: "block" }}>
               <input
                 type="checkbox"
                 checked={settings.wordWrap}
@@ -164,6 +195,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 }
               />
               Word Wrap in Editor
+            </label>
+            <label style={{ cursor: "pointer", display: "block" }}>
+              <input
+                type="checkbox"
+                checked={settings.useTabsIndent}
+                onChange={(e) =>
+                  updateSettings({ useTabsIndent: e.target.checked })
+                }
+              />
+              Indent using Hard Tabs (instead of Spaces)
             </label>
           </div>
         </div>

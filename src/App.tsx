@@ -327,7 +327,9 @@ function App() {
     { id: 'snapshot', label: '📸 Code Snapshot', category: 'Tools', shortcut: 'Ctrl+Alt+S', perform: () => setScreenshotModalVisible(true) },
     { id: 'report', label: '📄 Lab Report', category: 'Tools', shortcut: 'Ctrl+Alt+R', perform: () => setReportModalVisible(true) },
     { id: 'settings', label: '⚙️ Preferences', category: 'General', shortcut: 'Ctrl+,', perform: () => setSettingsModalVisible(true) },
-    { id: 'toggle-comment', label: '💬 Toggle Comment', category: 'Edit', shortcut: 'Ctrl+/', perform: () => editorRef.current?.toggleComment() },
+    { id: 'toggle-comment', label: '💬 Toggle Line Comment', category: 'Edit', shortcut: 'Ctrl+/', perform: () => editorRef.current?.toggleComment() },
+    { id: 'toggle-block-comment', label: '💬 Toggle Block Comment', category: 'Edit', shortcut: 'Shift+Alt+A', perform: () => editorRef.current?.toggleBlockComment() },
+    { id: 'go-to-symbol', label: '🔍 Go to Symbol', category: 'Navigation', shortcut: 'Ctrl+Shift+O', perform: () => editorRef.current?.openSymbolPicker() },
   ];
 
   return (
@@ -418,6 +420,7 @@ function App() {
               <Editor
                 ref={editorRef}
                 code={activeTab.code}
+                fileName={activeTab.name}
                 onChange={updateActiveCode}
               />
             ) : (
