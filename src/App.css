@@ -82,10 +82,12 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .file-tree-header {
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-size: 11px;
   font-weight: 700;
   color: var(--text-secondary);
@@ -94,11 +96,16 @@ body {
   align-items: center;
   justify-content: space-between;
   letter-spacing: 0.5px;
+  flex-wrap: wrap;
+  gap: 4px;
+  overflow: hidden;
 }
 
 .file-tree-header-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .icon-action-btn {
@@ -108,13 +115,14 @@ body {
   font-size: 12px;
   padding: 2px 4px;
   border-radius: 4px;
-  opacity: 0.7;
+  opacity: 0.85;
   transition: all 0.15s ease;
+  line-height: 1;
 }
 
 .icon-action-btn:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-hover);
 }
 
 .file-tree-path {
@@ -1190,14 +1198,16 @@ body {
 
 /* ===== BUILT-IN EXAMPLES ===== */
 .welcome-examples {
-  margin-top: 18px;
+  margin-top: 20px;
   text-align: left;
 }
 
 .welcome-examples h4 {
-  color: var(--text-dim);
+  color: var(--text-bright, #ffdd66);
   font-size: 13px;
   margin-bottom: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .example-item {
@@ -1205,18 +1215,21 @@ body {
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: background 0.15s ease;
-  border: 1px solid transparent;
+  gap: 10px;
+  transition: all 0.15s ease;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  margin-bottom: 6px;
 }
 
 .example-item:hover {
   background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--border);
+  color: var(--text-bright);
+  border-color: var(--accent);
+  transform: translateX(2px);
 }
 
 .example-item .example-icon {
@@ -1224,13 +1237,14 @@ body {
 }
 
 .example-item .example-label {
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: var(--text-bright, #ffdd66);
 }
 
 .example-item .example-desc {
   font-size: 11px;
-  opacity: 0.6;
+  color: var(--text-secondary);
+  opacity: 0.85;
   margin-left: auto;
 }
 

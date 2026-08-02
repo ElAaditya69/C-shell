@@ -147,17 +147,19 @@ export function useTabs() {
     }
   };
 
-  const newFile = () => {
+  const newFile = (initialCode?: string, customName?: string) => {
     const id = `untitled-${untitledCounter.current}`;
-    const name = `Untitled-${untitledCounter.current}.c`;
+    const name = customName || `Untitled-${untitledCounter.current}.c`;
     untitledCounter.current += 1;
+
+    const codeToUse = initialCode !== undefined ? initialCode : STARTER_CODE;
 
     const newTab: OpenTab = {
       id,
       path: null,
       name,
-      code: STARTER_CODE,
-      savedCode: STARTER_CODE,
+      code: codeToUse,
+      savedCode: codeToUse,
     };
 
     setTabs((prev) => [...prev, newTab]);

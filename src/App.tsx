@@ -138,10 +138,8 @@ function App() {
   };
 
   /* Open a built-in example as a new untitled tab */
-  const openExample = (code: string, _filename: string) => {
-    newFile();
-    /* small delay to let the new tab mount, then set its code */
-    setTimeout(() => updateActiveCode(code), 50);
+  const openExample = (code: string, filename: string) => {
+    newFile(code, filename);
   };
 
   /* Detect if a file is Python and run accordingly */
