@@ -4,7 +4,7 @@
 Build the ultimate lightweight, high-performance, cross-platform C IDE designed for students, educators, and C developers.
 
 ## Current Version
-**v0.3.0 (Sprint 3.5 Complete — Stability, Polish & Reliability)**
+**v0.4.0 (Pre-Sprint-4 Complete — Full Feature IDE)**
 
 ---
 
@@ -19,19 +19,46 @@ Build the ultimate lightweight, high-performance, cross-platform C IDE designed 
 
 ### 2. Intelligent C Compiler Integration
 - **GCC / Clang Engine**: Integrated Build & Run flow with colored terminal output and live compilation timing.
-- **Interactive Diagnostics**: Structured GCC error/warning parser emits diagnostic events. Interactive **Problems** tab lets users click any diagnostic to jump straight to the line and column in the editor.
+- **Interactive Diagnostics**: Structured GCC error/warning parser with error/warning count badges, filtering, and click-to-jump navigation.
+- **Project Configuration**: Per-project `.cshell.json` files for custom compiler, flags, include/library directories, and run arguments.
+- **Build Actions**: Rebuild, Clean, and Cancel Build from Command Palette. Concurrent build prevention.
 
 ### 3. Modern Code Editor
-- **CodeMirror 6 Engine**: Syntax highlighting, current line highlight, bracket matching, search & replace (`Ctrl+F`/`Ctrl+H`), and Go-To-Line (`Ctrl+G`).
-- **Formatting & Customization**: Integrated `clang-format` engine (`Ctrl+Shift+F`), configurable Tab Size (2-8 spaces), Word Wrap toggle, Font Size slider, and 4 Theme Presets (Retro, Midnight, Solarized, Light).
-- **Auto Clean on Save**: Automatically trims trailing whitespace and ensures a final trailing newline when saving.
+- **CodeMirror 6 Engine**: Syntax highlighting, current line highlight, bracket matching, search & replace, multi-cursor, column selection.
+- **Formatting & Customization**: Integrated `clang-format` engine, configurable Tab Size, Hard Tabs, Word Wrap, Font Size, Font Family, and 4 Theme Presets.
+- **Smart Editing**: Line comments, block comments, move/duplicate lines, line bookmarks with jump navigation.
+- **Auto Clean on Save**: Automatically trims trailing whitespace and ensures a final trailing newline.
+- **Breadcrumbs & Symbol Navigation**: Visual breadcrumbs bar and Go to Symbol modal for functions, structs, and macros.
 
-### 4. Productivity & Academic Tools
+### 4. Navigation & Productivity
 - **Command Palette (`Ctrl+Shift+P`)**: Search and execute all IDE commands with fuzzy search.
 - **Quick Open (`Ctrl+P`)**: Fast workspace file switcher.
+- **Go to Line (`Ctrl+G`)** and **Go to Symbol (`Ctrl+Shift+O`)**.
+- **Workspace Search & Replace (`Ctrl+Shift+F`)**: Search across all files with match highlighting and batch replace.
+- **Line Bookmarks (`Ctrl+F2` / `F2`)**: Toggle and jump between bookmarked lines.
+
+### 5. File Explorer
+- **Drag & Drop**: HTML5 drag-and-drop file movement between directories.
+- **Context Menu**: New File, New Folder, Rename, Delete, Copy Path, Copy Containing Folder Path, Pin to Favorites.
+- **Sort & Filter**: Sort by name/type, toggle hidden files, compact/comfortable density mode.
+- **File Type Icons**: Visual differentiation for `.c`, `.h`, `.py`, `.js`, `.json`, `.md`, and more.
+
+### 6. Diagnostics / Problems Panel
+- **Error & Warning Count Badges**: Real-time error and warning counts displayed as colored badges.
+- **Filter & Group**: Filter by errors only, warnings only, or show all.
+- **Click to Navigate**: Click any diagnostic to jump to exact file, line, and column in the editor.
+- **Copy Messages**: Copy individual or all diagnostic messages to clipboard.
+
+### 7. Customization Engine
+- **Global Settings**: Persisted at `~/.c-shell/settings.json` with automatic recovery from corruption.
+- **Workspace Settings**: Per-project `.cshell.json` configuration files.
+- **Theme Import/Export**: Export settings JSON to clipboard and import from clipboard.
+- **Layout Controls**: Toggle toolbar, status bar; configure explorer and terminal positions.
+
+### 8. Academic Tools
 - **Code Snapshot (`Ctrl+Alt+S`)**: Export beautiful, syntax-highlighted code screenshots with custom themes and padding.
-- **Academic Lab Report Generator (`Ctrl+Alt+R`)**: Convert C source code and execution terminal output into formatted PDF or HTML lab reports.
-- **Rich Welcome Screen**: Startup dashboard featuring recent projects, quick action buttons, and keyboard shortcut reference.
+- **Academic Lab Report Generator (`Ctrl+Alt+R`)**: Convert C source code and execution output into formatted PDF/HTML lab reports.
+- **Rich Welcome Screen**: Startup dashboard with recent projects, quick action buttons, and keyboard shortcut reference.
 
 ---
 
@@ -41,6 +68,20 @@ Build the ultimate lightweight, high-performance, cross-platform C IDE designed 
 - **Backend**: Tauri v2, Rust 2021 edition.
 - **IPC & Events**: Custom Tauri commands (`compile.rs`, `terminal/`, `settings.rs`, `format.rs`, `app.rs`).
 - **Build System**: Vite 8.
+- **CI/CD**: GitHub Actions cross-platform matrix (macOS, Windows, Linux) with lint + typecheck pipeline.
+
+---
+
+## 📖 Documentation
+
+| Document | Description |
+|---|---|
+| [README.md](README.md) | Project overview and quick start |
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | Platform-specific installation guide |
+| [docs/KEYBOARD_SHORTCUTS.md](docs/KEYBOARD_SHORTCUTS.md) | Complete keyboard shortcut reference |
+| [docs/SETTINGS.md](docs/SETTINGS.md) | All configurable preferences |
+| [docs/PROJECT_FILE.md](docs/PROJECT_FILE.md) | `.cshell.json` schema and examples |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ---
 
