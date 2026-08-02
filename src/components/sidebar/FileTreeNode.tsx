@@ -5,6 +5,8 @@ interface FileTreeNodeProps {
   node: FileNode;
   currentFile: string | null;
   density?: 'compact' | 'comfortable';
+  showHidden?: boolean;
+  sortBy?: 'name' | 'type';
   onFileSelect: (path: string) => void;
   onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
   onMoveNode?: (srcPath: string, targetFolderPath: string) => void;
@@ -14,6 +16,8 @@ export function FileTreeNode({
   node,
   currentFile,
   density = 'comfortable',
+  showHidden = false,
+  sortBy = 'name',
   onFileSelect,
   onContextMenu,
   onMoveNode,
@@ -29,6 +33,8 @@ export function FileTreeNode({
     if (name.endsWith(".h")) return "📋";
     if (name.endsWith(".json")) return "⚙️";
     if (name.endsWith(".md")) return "📄";
+    if (name.endsWith(".py")) return "🐍";
+    if (name.endsWith(".js") || name.endsWith(".ts")) return "📜";
     return "📄";
   };
 
@@ -53,6 +59,20 @@ export function FileTreeNode({
 
   const isActive = !node.is_dir && currentFile === node.path;
   const paddingY = density === 'compact' ? '3px' : '6px';
+
+  // Process children according to showHidden and sortBy filters
+  let processedChildren = (children || []).filter(
+    (f) => showHidden || !f.name.startsWith(".")
+  );
+  processedChildren.sort((a, b) => {
+    if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+    if (sortBy === 'type') {
+      const extA = a.name.split('.').pop() || '';
+      const extB = b.name.split('.').pop() || '';
+      return extA.localeCompare(extB);
+    }
+    return a.name.localeCompare(b.name);
+  });
 
   return (
     <div className="tree-node">
@@ -100,15 +120,19 @@ export function FileTreeNode({
       {node.is_dir && expanded && (
         <div className="tree-children">
           {loading && <div className="file-tree-loading">Loading...</div>}
-          {children?.length === 0 && !loading && (
-            <div className="file-tree-loading">(empty)</div>
+          {processedChildren.length === 0 && !loading && (
+            <div className="file-tree-loading" style={{ opacity: 0.5, fontStyle: "italic" }}>
+              (empty folder)
+            </div>
           )}
-          {children?.map((child) => (
+          {processedChildren.map((child) => (
             <FileTreeNode
               key={child.path}
               node={child}
               currentFile={currentFile}
               density={density}
+              showHidden={showHidden}
+              sortBy={sortBy}
               onFileSelect={onFileSelect}
               onContextMenu={onContextMenu}
               onMoveNode={onMoveNode}

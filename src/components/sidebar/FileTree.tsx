@@ -21,7 +21,7 @@ interface FileTreeProps {
 
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
-const COLLAPSED_WIDTH = 32;
+const COLLAPSED_WIDTH = 36;
 
 export function FileTree({
   files,
@@ -112,11 +112,28 @@ export function FileTree({
 
   if (collapsed) {
     return (
-      <div className="file-tree collapsed" style={{ width: COLLAPSED_WIDTH }}>
+      <div
+        className="file-tree collapsed"
+        style={{
+          width: COLLAPSED_WIDTH,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          paddingTop: "12px",
+          background: "var(--bg-secondary)",
+          borderRight: "1px solid var(--border)",
+        }}
+      >
         <button
-          className="sidebar-expand-btn"
+          className="icon-action-btn"
           onClick={() => setCollapsed(false)}
-          title="Show Explorer"
+          title="Expand Sidebar (Click to restore)"
+          style={{
+            fontSize: "16px",
+            color: "var(--accent)",
+            padding: "8px",
+            cursor: "pointer",
+          }}
         >
           »
         </button>
@@ -129,28 +146,54 @@ export function FileTree({
       <div className="file-tree-header">
         <span className="explorer-title">📂 EXPLORER</span>
         <div className="file-tree-header-actions">
+          {/* Eye Icon: Show/Hide Hidden Files */}
           <button
-            className="icon-action-btn"
+            className={`icon-action-btn ${showHidden ? "active" : ""}`}
             onClick={() => setShowHidden((v) => !v)}
-            title={showHidden ? "Hide Hidden Files" : "Show Hidden Files"}
-            style={{ opacity: showHidden ? 1 : 0.5 }}
+            title={showHidden ? "Hidden Files: SHOWN (Click to hide)" : "Hidden Files: HIDDEN (Click to show)"}
+            style={{
+              background: showHidden ? "rgba(255, 107, 53, 0.2)" : "transparent",
+              border: showHidden ? "1px solid var(--accent)" : "1px solid transparent",
+              borderRadius: "4px",
+              padding: "2px 5px",
+            }}
           >
             👁️
           </button>
+
+          {/* ABC Icon: Sort by Name vs Type */}
           <button
-            className="icon-action-btn"
+            className={`icon-action-btn ${sortBy === 'type' ? "active" : ""}`}
             onClick={() => setSortBy((s) => (s === 'name' ? 'type' : 'name'))}
-            title={`Sort by: ${sortBy.toUpperCase()}`}
+            title={sortBy === 'type' ? "Sort: BY FILE EXTENSION (Click for By Name)" : "Sort: BY NAME A-Z (Click for By Extension)"}
+            style={{
+              background: sortBy === 'type' ? "rgba(255, 176, 0, 0.2)" : "transparent",
+              border: sortBy === 'type' ? "1px solid var(--text-primary)" : "1px solid transparent",
+              borderRadius: "4px",
+              padding: "2px 5px",
+              fontWeight: 600,
+              fontSize: "11px",
+            }}
           >
-            🔤
+            {sortBy === 'name' ? "🔤" : "🏷️"}
           </button>
+
+          {/* Density Icon: Compact vs Comfortable */}
           <button
-            className="icon-action-btn"
+            className={`icon-action-btn ${density === 'compact' ? "active" : ""}`}
             onClick={() => setDensity((d) => (d === 'compact' ? 'comfortable' : 'compact'))}
-            title={`Density: ${density}`}
+            title={density === 'compact' ? "Density: COMPACT (Click for Comfortable)" : "Density: COMFORTABLE (Click for Compact)"}
+            style={{
+              background: density === 'compact' ? "rgba(0, 255, 136, 0.15)" : "transparent",
+              border: density === 'compact' ? "1px solid var(--success)" : "1px solid transparent",
+              borderRadius: "4px",
+              padding: "2px 5px",
+            }}
           >
             🪟
           </button>
+
+          {/* Open Folder */}
           <button
             className="icon-action-btn"
             onClick={onOpenFolder}
@@ -158,6 +201,8 @@ export function FileTree({
           >
             📁
           </button>
+
+          {/* New File */}
           <button
             className="icon-action-btn"
             onClick={onNewFile}
@@ -165,6 +210,8 @@ export function FileTree({
           >
             📝
           </button>
+
+          {/* Refresh */}
           <button
             className="icon-action-btn"
             onClick={onRefresh}
@@ -172,10 +219,13 @@ export function FileTree({
           >
             🔄
           </button>
+
+          {/* Two Arrows: Collapse Sidebar */}
           <button
             className="icon-action-btn"
             onClick={() => setCollapsed(true)}
-            title="Collapse Explorer"
+            title="Collapse Sidebar Explorer"
+            style={{ fontSize: "14px", fontWeight: "bold" }}
           >
             «
           </button>
@@ -183,7 +233,7 @@ export function FileTree({
       </div>
 
       <div className="file-tree-path">
-        {currentDir.split("/").pop() || "Desktop"}
+        {currentDir.split("/").pop() || currentDir.split("\\").pop() || "Workspace"}
       </div>
 
       {pinnedFolders.length > 0 && (
@@ -216,6 +266,8 @@ export function FileTree({
               node={node}
               currentFile={currentFile}
               density={density}
+              showHidden={showHidden}
+              sortBy={sortBy}
               onFileSelect={onFileSelect}
               onContextMenu={openContextMenu}
               onMoveNode={handleMoveNode}
