@@ -143,10 +143,13 @@ export function useTabs() {
 
   const newFile = (initialCode?: string, customName?: string) => {
     const id = `untitled-${untitledCounter.current}`;
-    const name = customName || `Untitled-${untitledCounter.current}.c`;
+    const name =
+      typeof customName === "string"
+        ? customName
+        : `Untitled-${untitledCounter.current}.c`;
     untitledCounter.current += 1;
 
-    const codeToUse = initialCode !== undefined ? initialCode : STARTER_CODE;
+    const codeToUse = typeof initialCode === "string" ? initialCode : STARTER_CODE;
 
     const newTab: OpenTab = {
       id,

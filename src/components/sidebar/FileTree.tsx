@@ -204,12 +204,13 @@ export function FileTree({
 
           {/* Two Arrows: Collapse Sidebar */}
           <button
-            className="icon-action-btn"
+            className="icon-action-btn collapse-sidebar-btn"
             onClick={() => setCollapsed(true)}
             title="Collapse Sidebar Explorer"
-            style={{ fontSize: "14px", fontWeight: "bold" }}
+            aria-label="Collapse Explorer sidebar"
           >
-            «
+            <span aria-hidden="true">«</span>
+            <span className="collapse-sidebar-btn-label">Collapse</span>
           </button>
         </div>
       </div>

@@ -125,6 +125,46 @@ body {
   background: var(--bg-hover);
 }
 
+/* A text label keeps this important control discoverable in every theme. */
+.collapse-sidebar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent, #ffb000);
+  background: color-mix(in srgb, var(--accent, #ffb000) 14%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--accent, #ffb000) 60%, var(--border));
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 6px;
+  opacity: 1;
+}
+
+.collapse-sidebar-btn span[aria-hidden="true"] {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 10px;
+}
+
+.collapse-sidebar-btn:hover,
+.collapse-sidebar-btn:focus-visible {
+  color: #17131f;
+  background: var(--accent, #ffb000);
+  border-color: var(--accent, #ffb000);
+  outline: none;
+}
+
+.collapse-sidebar-btn:hover span[aria-hidden="true"],
+.collapse-sidebar-btn:focus-visible span[aria-hidden="true"] {
+  color: #17131f;
+}
+
+@media (max-width: 780px) {
+  .collapse-sidebar-btn-label {
+    display: none;
+  }
+}
+
 .file-tree-path {
   padding: 6px 12px;
   font-size: 11px;

@@ -55,7 +55,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   // Parse symbols (functions and structs) from C code
   useEffect(() => {
     const parsed: SymbolItem[] = [];
-    const lines = code.split('\n');
+    const safeCode = typeof code === 'string' ? code : '';
+    const lines = safeCode.split('\n');
     lines.forEach((line, idx) => {
       // Functions
       const fnMatch = line.match(/\b(?:int|void|float|double|char|long|short|bool|auto)\s+([a-zA-Z_]\w*)\s*\(/);
