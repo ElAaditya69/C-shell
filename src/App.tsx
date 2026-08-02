@@ -15,6 +15,7 @@ import { ScreenshotModal } from './components/screenshot/ScreenshotModal';
 import { LabReportModal } from './components/report/LabReportModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { CommandPalette, CommandAction } from './components/common/CommandPalette';
+import { SearchInFilesModal } from './components/common/SearchInFilesModal';
 import { useTabs } from './hooks/useTabs';
 import { useFileExplorer } from './hooks/useFileExplorer';
 import { useSettings } from './context/SettingsContext';
@@ -24,6 +25,7 @@ function App() {
   const [activityState, setActivityState] = useState<ActivityState>('idle');
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [screenshotModalVisible, setScreenshotModalVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
@@ -329,7 +331,7 @@ function App() {
     { id: 'settings', label: '⚙️ Preferences', category: 'General', shortcut: 'Ctrl+,', perform: () => setSettingsModalVisible(true) },
     { id: 'toggle-comment', label: '💬 Toggle Line Comment', category: 'Edit', shortcut: 'Ctrl+/', perform: () => editorRef.current?.toggleComment() },
     { id: 'toggle-block-comment', label: '💬 Toggle Block Comment', category: 'Edit', shortcut: 'Shift+Alt+A', perform: () => editorRef.current?.toggleBlockComment() },
-    { id: 'go-to-symbol', label: '🔍 Go to Symbol', category: 'Navigation', shortcut: 'Ctrl+Shift+O', perform: () => editorRef.current?.openSymbolPicker() },
+    { id: 'search-files', label: '🔍 Search & Replace in Workspace', category: 'Navigation', shortcut: 'Ctrl+Shift+F', perform: () => setSearchModalVisible(true) },
   ];
 
   return (
@@ -489,6 +491,14 @@ function App() {
         <CommandPalette
           actions={commandActions}
           onClose={() => setCommandPaletteVisible(false)}
+        />
+      )}
+
+      {searchModalVisible && (
+        <SearchInFilesModal
+          files={files}
+          onSelectFile={openFile}
+          onClose={() => setSearchModalVisible(false)}
         />
       )}
     </div>

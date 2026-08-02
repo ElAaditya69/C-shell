@@ -22,7 +22,7 @@ export function useTabs() {
   const [tabs, setTabs] = useState<OpenTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const untitledCounter = useRef(1);
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, addRecentFile } = useSettings();
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
 
@@ -124,6 +124,7 @@ export function useTabs() {
   }, [tabs, activeTabId]);
 
   const openFile = async (path: string) => {
+    addRecentFile(path);
     const existing = tabs.find((t) => t.path === path);
     if (existing) {
       setActiveTabId(existing.id);

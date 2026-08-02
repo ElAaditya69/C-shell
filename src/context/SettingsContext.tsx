@@ -17,6 +17,7 @@ export interface AppSettings {
   openTabs: string[];
   activeTabPath: string | null;
   recentProjects: string[];
+  recentFiles: string[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -34,18 +35,21 @@ const DEFAULT_SETTINGS: AppSettings = {
   openTabs: [],
   activeTabPath: null,
   recentProjects: [],
+  recentFiles: [],
 };
 
 interface SettingsContextType {
   settings: AppSettings;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
   addRecentProject: (folderPath: string) => Promise<void>;
+  addRecentFile: (filePath: string) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType>({
   settings: DEFAULT_SETTINGS,
   updateSettings: async () => {},
   addRecentProject: async () => {},
+  addRecentFile: async () => {},
 });
 
 export function applyThemeVariables(themeKey: string) {
@@ -104,9 +108,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const addRecentFile = async (filePath: string) => {
+    if (!filePath) return;
+    setSettings((prev) => {
+      const filtered = (prev.recentFiles || []).filter((f) => f !== filePath);
+      const updated = [filePath, ...filtered].slice(0, 10);
+      const next = { ...prev, recentFiles: updated };
+      invoke("save_settings", { settingsJson: JSON.stringify(next) }).catch((err) =>
+        console.error("Failed to save settings:", err)
+      );
+      return next;
+    });
+  };
+
   return (
     <SettingsContext.Provider
-      value={{ settings, updateSettings, addRecentProject }}
+      value={{ settings, updateSettings, addRecentProject, addRecentFile }}
     >
       {children}
     </SettingsContext.Provider>
