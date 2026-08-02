@@ -8,6 +8,13 @@ export interface AppSettings {
   terminalHeight: number;
   showToolbarLabels: boolean;
   editorFontSize: number;
+  tabSize: number;
+  wordWrap: boolean;
+  autosave: boolean;
+  lastDir: string | null;
+  openTabs: string[];
+  activeTabPath: string | null;
+  recentProjects: string[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -16,16 +23,25 @@ const DEFAULT_SETTINGS: AppSettings = {
   terminalHeight: 200,
   showToolbarLabels: true,
   editorFontSize: 14,
+  tabSize: 4,
+  wordWrap: true,
+  autosave: false,
+  lastDir: null,
+  openTabs: [],
+  activeTabPath: null,
+  recentProjects: [],
 };
 
 interface SettingsContextType {
   settings: AppSettings;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  addRecentProject: (folderPath: string) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType>({
   settings: DEFAULT_SETTINGS,
   updateSettings: async () => {},
+  addRecentProject: async () => {},
 });
 
 export function applyThemeVariables(themeKey: string) {
@@ -71,8 +87,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const addRecentProject = async (folderPath: string) => {
+    if (!folderPath) return;
+    setSettings((prev) => {
+      const filtered = (prev.recentProjects || []).filter((p) => p !== folderPath);
+      const updated = [folderPath, ...filtered].slice(0, 10);
+      const next = { ...prev, recentProjects: updated, lastDir: folderPath };
+      invoke("save_settings", { settingsJson: JSON.stringify(next) }).catch((err) =>
+        console.error("Failed to save settings:", err)
+      );
+      return next;
+    });
+  };
+
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings }}>
+    <SettingsContext.Provider
+      value={{ settings, updateSettings, addRecentProject }}
+    >
       {children}
     </SettingsContext.Provider>
   );

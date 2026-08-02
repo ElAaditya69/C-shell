@@ -1012,3 +1012,104 @@ body {
 .tool-btn.subtle:hover {
   opacity: 1;
 }
+
+/* ===== WELCOME SCREEN ===== */
+.welcome-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background: var(--bg-primary);
+}
+
+.welcome-card {
+  text-align: center;
+  max-width: 600px;
+  padding: 48px 40px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.welcome-logo {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.welcome-tagline {
+  color: var(--text-dim);
+  margin-bottom: 32px;
+  font-size: 14px;
+}
+
+.welcome-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.welcome-shortcuts {
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-dim);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin-top: 16px;
+}
+
+.welcome-shortcuts kbd {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--text-secondary);
+}
+
+.welcome-recent {
+  margin-top: 24px;
+  text-align: left;
+}
+
+.welcome-recent h4 {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.welcome-recent-item {
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: background 0.15s ease;
+}
+
+.welcome-recent-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ===== SETTINGS GEAR BUTTON ===== */
+.icon-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.icon-action-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* ===== DIAGNOSTICS PANEL ===== */
+.diagnostics-panel {
+  background: var(--bg-primary);
+}

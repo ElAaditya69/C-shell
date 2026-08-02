@@ -1,8 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { XTermView, XTermHandle } from "./XTermView";
+import { DiagnosticsPanel, Diagnostic } from "./DiagnosticsPanel";
 import { useSettings } from "../../context/SettingsContext";
+import { listen } from "@tauri-apps/api/event";
 
 type Mode = "normal" | "minimized" | "maximized" | "closed";
+type PanelTab = "terminal" | "problems";
 
 const MIN_HEIGHT = 120;
 const MINIMIZED_HEIGHT = 80;
@@ -13,10 +16,16 @@ export interface TerminalPanelHandle {
   clear: () => void;
 }
 
-export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPanel(_, ref) {
+interface TerminalPanelProps {
+  onSelectDiagnostic?: (diag: Diagnostic) => void;
+}
+
+export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>(function TerminalPanel({ onSelectDiagnostic }, ref) {
   const { settings, updateSettings } = useSettings();
   const [height, setHeight] = useState(settings.terminalHeight || 200);
   const [mode, setMode] = useState<Mode>("normal");
+  const [activeTab, setActiveTab] = useState<PanelTab>("terminal");
+  const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const draggingRef = useRef(false);
   const heightRef = useRef(height);
   heightRef.current = height;
@@ -26,6 +35,21 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPa
     getTerminalBuffer: () => xtermRef.current?.getBufferText() || "",
     clear: () => xtermRef.current?.clear(),
   }));
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      unlisten = await listen<Diagnostic[]>("compiler-diagnostics", (e) => {
+        setDiagnostics(e.payload || []);
+        if (e.payload && e.payload.length > 0) {
+          setActiveTab("problems");
+        }
+      });
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (settings.terminalHeight) {
@@ -80,7 +104,38 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPa
       )}
 
       <div className="terminal-header" onClick={restore}>
-        <span className="terminal-title">🖥️ TERMINAL</span>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <span
+            className={`terminal-title ${activeTab === "terminal" ? "active" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveTab("terminal");
+            }}
+            style={{
+              cursor: "pointer",
+              opacity: activeTab === "terminal" ? 1 : 0.6,
+              borderBottom: activeTab === "terminal" ? "2px solid var(--accent)" : "none",
+              paddingBottom: "2px",
+            }}
+          >
+            🖥️ TERMINAL
+          </span>
+          <span
+            className={`terminal-title ${activeTab === "problems" ? "active" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveTab("problems");
+            }}
+            style={{
+              cursor: "pointer",
+              opacity: activeTab === "problems" ? 1 : 0.6,
+              borderBottom: activeTab === "problems" ? "2px solid var(--accent)" : "none",
+              paddingBottom: "2px",
+            }}
+          >
+            ⚠️ PROBLEMS {diagnostics.length > 0 && `(${diagnostics.length})`}
+          </span>
+        </div>
 
         <div className="terminal-header-right">
           <div className="terminal-actions">
@@ -89,7 +144,8 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPa
               title="Clear terminal"
               onClick={(e) => {
                 e.stopPropagation();
-                xtermRef.current?.clear();
+                if (activeTab === "terminal") xtermRef.current?.clear();
+                else setDiagnostics([]);
               }}
             >
               🧹 Clear
@@ -141,7 +197,14 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle>(function TerminalPa
           display: mode === "minimized" || mode === "closed" ? "none" : "block",
         }}
       >
-        <XTermView ref={xtermRef} />
+        {activeTab === "terminal" ? (
+          <XTermView ref={xtermRef} />
+        ) : (
+          <DiagnosticsPanel
+            diagnostics={diagnostics}
+            onSelectDiagnostic={(diag) => onSelectDiagnostic?.(diag)}
+          />
+        )}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { FormatService } from './services/FormatService';
 import { Editor, EditorHandle } from './components/editor/Editor';
 import { TabBar } from './components/editor/TabBar';
 import { QuickOpen } from './components/editor/QuickOpen';
+import { WelcomeScreen } from './components/common/WelcomeScreen';
 import { TerminalPanel, TerminalPanelHandle } from './components/terminal/TerminalPanel';
 import { RUN_FINISHED_EVENT } from './components/terminal/XTermView';
 import { Toolbar, ActivityState } from './components/toolbar/Toolbar';
@@ -13,16 +14,20 @@ import { FileTree } from './components/sidebar/FileTree';
 import { ScreenshotModal } from './components/screenshot/ScreenshotModal';
 import { LabReportModal } from './components/report/LabReportModal';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { CommandPalette, CommandAction } from './components/common/CommandPalette';
 import { useTabs } from './hooks/useTabs';
 import { useFileExplorer } from './hooks/useFileExplorer';
+import { useSettings } from './context/SettingsContext';
 import './App.css';
 
 function App() {
   const [activityState, setActivityState] = useState<ActivityState>('idle');
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+  const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
   const [screenshotModalVisible, setScreenshotModalVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const { settings } = useSettings();
   const editorRef = useRef<EditorHandle>(null);
   const terminalRef = useRef<TerminalPanelHandle>(null);
 
@@ -55,16 +60,39 @@ function App() {
     renamePath,
   } = useFileExplorer();
 
+  const isRestoredRef = useRef(false);
+
   useEffect(() => {
+    if (isRestoredRef.current) return;
     (async () => {
       try {
-        const home = await invoke<string>('get_home_dir');
-        await loadDirectory(home);
+        const targetDir =
+          settings.lastDir || (await invoke<string>('get_home_dir'));
+        if (targetDir) await loadDirectory(targetDir);
+
+        if (settings.openTabs && settings.openTabs.length > 0) {
+          for (const path of settings.openTabs) {
+            await openFile(path);
+          }
+        }
+        isRestoredRef.current = true;
       } catch {
-        // Fallback: stay empty until user opens folder
+        // Stay clean if loading fails
       }
     })();
-  }, [loadDirectory]);
+  }, [loadDirectory, settings.lastDir, settings.openTabs]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const hasUnsaved = tabs.some((t) => t.code !== t.savedCode);
+      if (hasUnsaved) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [tabs]);
 
   const handleOpenFolder = async () => {
     await openFolder();
@@ -250,6 +278,11 @@ function App() {
         handleOpenFolder();
         return;
       }
+      if (mod && e.shiftKey && key === 'p') {
+        e.preventDefault();
+        setCommandPaletteVisible((v) => !v);
+        return;
+      }
       if (mod && key === 'p') {
         e.preventDefault();
         setQuickOpenVisible((v) => !v);
@@ -269,6 +302,30 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tabs, activeTab, activeTabId, quickOpenVisible]);
+
+  const handleSelectDiagnostic = (diag: { file: string; line: number; col: number }) => {
+    const matchingTab = tabs.find((t) => t.name === diag.file || t.path?.endsWith(diag.file));
+    if (matchingTab) {
+      setActiveTabId(matchingTab.id);
+    }
+    setTimeout(() => {
+      editorRef.current?.jumpToPosition(diag.line, diag.col);
+    }, 50);
+  };
+
+  const commandActions: CommandAction[] = [
+    { id: 'run', label: '▶ Run Code', category: 'Build', shortcut: 'Ctrl+Enter', perform: runCode },
+    { id: 'build', label: '🔨 Build Only', category: 'Build', perform: buildCode },
+    { id: 'format', label: '✨ Format Code', category: 'Edit', shortcut: 'Ctrl+Shift+F', perform: formatCode },
+    { id: 'save', label: '💾 Save File', category: 'File', shortcut: 'Ctrl+S', perform: handleSave },
+    { id: 'new', label: '📝 New File', category: 'File', shortcut: 'Ctrl+N', perform: newFile },
+    { id: 'open-folder', label: '📁 Open Folder', category: 'File', shortcut: 'Ctrl+O', perform: handleOpenFolder },
+    { id: 'open-file', label: '📄 Open File', category: 'File', perform: handleOpenFile },
+    { id: 'snapshot', label: '📸 Code Snapshot', category: 'Tools', shortcut: 'Ctrl+Alt+S', perform: () => setScreenshotModalVisible(true) },
+    { id: 'report', label: '📄 Lab Report', category: 'Tools', shortcut: 'Ctrl+Alt+R', perform: () => setReportModalVisible(true) },
+    { id: 'settings', label: '⚙️ Preferences', category: 'General', shortcut: 'Ctrl+,', perform: () => setSettingsModalVisible(true) },
+    { id: 'toggle-comment', label: '💬 Toggle Comment', category: 'Edit', shortcut: 'Ctrl+/', perform: () => editorRef.current?.toggleComment() },
+  ];
 
   return (
     <div className="app retro-theme">
@@ -324,20 +381,24 @@ function App() {
                 onChange={updateActiveCode}
               />
             ) : (
-              <div className="editor-empty-state">
-                <p>No file open</p>
-                <p>Click "New" to create a file or "Open File" to browse.</p>
-              </div>
+              <WelcomeScreen
+                onNewFile={newFile}
+                onOpenFolder={handleOpenFolder}
+                onOpenFile={handleOpenFile}
+                onOpenRecent={loadDirectory}
+              />
             )}
           </div>
 
-          <TerminalPanel ref={terminalRef} />
+          <TerminalPanel ref={terminalRef} onSelectDiagnostic={handleSelectDiagnostic} />
         </div>
       </div>
 
       <div className="statusbar">
         <span>📁 {activeTab?.path || 'No file'}</span>
         <span>{currentDir || 'No folder'}</span>
+        <span>Ln 1, Col 1</span>
+        <span>UTF-8</span>
         <span>
           {activityState === 'idle'
             ? '🟢 Ready'
@@ -349,7 +410,7 @@ function App() {
             ? '🟡 Formatting'
             : '🟡 Running'}
         </span>
-        <span>C99 Standard</span>
+        <span>gcc • C99</span>
       </div>
 
       {quickOpenVisible && (
@@ -379,6 +440,13 @@ function App() {
 
       {settingsModalVisible && (
         <SettingsModal onClose={() => setSettingsModalVisible(false)} />
+      )}
+
+      {commandPaletteVisible && (
+        <CommandPalette
+          actions={commandActions}
+          onClose={() => setCommandPaletteVisible(false)}
+        />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileService } from "../services/FileService";
+import { useSettings } from "../context/SettingsContext";
 
 export interface OpenTab {
   id: string;
@@ -21,8 +22,34 @@ export function useTabs() {
   const [tabs, setTabs] = useState<OpenTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const untitledCounter = useRef(1);
+  const { settings, updateSettings } = useSettings();
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+
+  useEffect(() => {
+    if (!settings.autosave) return;
+    const interval = setInterval(() => {
+      tabs.forEach(async (tab) => {
+        if (tab.path && tab.code !== tab.savedCode) {
+          try {
+            await FileService.writeFile(tab.path, tab.code);
+            setTabs((prev) =>
+              prev.map((t) => (t.id === tab.id ? { ...t, savedCode: tab.code } : t))
+            );
+          } catch (e) {
+            console.error("Autosave failed for tab:", tab.name, e);
+          }
+        }
+      });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [tabs, settings.autosave]);
+
+  useEffect(() => {
+    const validPaths = tabs.map((t) => t.path).filter((p): p is string => Boolean(p));
+    const activePath = activeTab?.path || null;
+    updateSettings({ openTabs: validPaths, activeTabPath: activePath });
+  }, [tabs, activeTabId]);
 
   const openFile = async (path: string) => {
     const existing = tabs.find((t) => t.path === path);
@@ -76,7 +103,15 @@ export function useTabs() {
     filePath: string,
     isNewId: boolean
   ) => {
-    await FileService.writeFile(filePath, tab.code);
+    let cleanCode = tab.code
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .join("\n");
+    if (!cleanCode.endsWith("\n")) {
+      cleanCode += "\n";
+    }
+
+    await FileService.writeFile(filePath, cleanCode);
     const tabId = isNewId ? filePath : tab.id;
 
     setTabs((prev) =>
@@ -87,7 +122,8 @@ export function useTabs() {
               id: tabId,
               path: filePath,
               name: filePath.split("/").pop()!,
-              savedCode: tab.code,
+              code: cleanCode,
+              savedCode: cleanCode,
             }
           : t
       )

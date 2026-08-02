@@ -1,20 +1,23 @@
 import { useCallback, useState } from "react";
 import { FileService, FileNode } from "../services/FileService";
+import { useSettings } from "../context/SettingsContext";
 
 export function useFileExplorer() {
   const [files, setFiles] = useState<FileNode[]>([]);
   const [currentDir, setCurrentDir] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const { addRecentProject } = useSettings();
 
   const loadDirectory = useCallback(async (dir: string) => {
     try {
       const nodes = await FileService.listDirectory(dir);
       setFiles(nodes);
       setCurrentDir(dir);
+      addRecentProject(dir);
     } catch (e) {
       console.error("Failed to load directory:", e);
     }
-  }, []);
+  }, [addRecentProject]);
 
   const refresh = useCallback(() => {
     setRefreshKey((k) => k + 1);

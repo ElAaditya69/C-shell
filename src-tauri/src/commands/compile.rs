@@ -1,5 +1,6 @@
 use super::terminal::send_to_terminal;
 use crate::terminal::events::{TERMINAL_FOCUS_EVENT, TERMINAL_OUTPUT_EVENT};
+use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -7,6 +8,49 @@ use std::time::Instant;
 use tauri::{command, AppHandle, Emitter};
 
 const RUN_DONE_MARKER: &str = "__CSHELL_RUN_DONE__";
+
+#[derive(Serialize, Clone, Debug)]
+pub struct Diagnostic {
+    pub file: String,
+    pub line: u32,
+    pub col: u32,
+    pub is_error: bool,
+    pub message: String,
+}
+
+fn parse_gcc_diagnostics(stderr: &str) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for line in stderr.lines() {
+        let parts: Vec<&str> = line.splitn(5, ':').collect();
+        if parts.len() >= 5 {
+            let path_part = parts[0].trim();
+            let file_name = Path::new(path_part)
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_else(|| path_part.to_string());
+
+            if let (Ok(line_num), Ok(col_num)) = (
+                parts[1].trim().parse::<u32>(),
+                parts[2].trim().parse::<u32>(),
+            ) {
+                let kind_part = parts[3].trim();
+                let is_error = kind_part.contains("error");
+                let is_warning = kind_part.contains("warning");
+
+                if is_error || is_warning {
+                    diagnostics.push(Diagnostic {
+                        file: file_name,
+                        line: line_num,
+                        col: col_num,
+                        is_error,
+                        message: parts[4].trim().to_string(),
+                    });
+                }
+            }
+        }
+    }
+    diagnostics
+}
 
 fn colorize_gcc_output(output: &str) -> String {
     output
@@ -85,6 +129,8 @@ fn build(app: &AppHandle, code: &str, filename: &str) -> Result<BuildOutcome, St
 
     let stderr = String::from_utf8_lossy(&compile_output.stderr);
     let success = compile_output.status.success();
+    let diagnostics = parse_gcc_diagnostics(&stderr);
+    let _ = app.emit("compiler-diagnostics", diagnostics);
 
     if !success {
         emit("\x1b[31m❌ COMPILATION ERROR:\x1b[0m\r\n".to_string());

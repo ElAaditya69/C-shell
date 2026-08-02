@@ -123,6 +123,48 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               />
               Show Text Labels on Toolbar Buttons
             </label>
+            <label style={{ cursor: "pointer", marginTop: "8px", display: "block" }}>
+              <input
+                type="checkbox"
+                checked={settings.autosave}
+                onChange={(e) =>
+                  updateSettings({ autosave: e.target.checked })
+                }
+              />
+              Autosave Files (every 30s)
+            </label>
+          </div>
+
+          {/* Tab Size */}
+          <div className="form-group span-2" style={{ marginBottom: "16px", marginTop: "14px" }}>
+            <label style={{ fontWeight: 600 }}>
+              Tab Size: {settings.tabSize} spaces
+            </label>
+            <input
+              type="range"
+              min={2}
+              max={8}
+              step={2}
+              value={settings.tabSize}
+              onChange={(e) =>
+                updateSettings({ tabSize: Number(e.target.value) })
+              }
+              style={{ marginTop: "6px" }}
+            />
+          </div>
+
+          {/* Word Wrap */}
+          <div className="include-toggles" style={{ marginTop: "10px" }}>
+            <label style={{ cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={settings.wordWrap}
+                onChange={(e) =>
+                  updateSettings({ wordWrap: e.target.checked })
+                }
+              />
+              Word Wrap in Editor
+            </label>
           </div>
         </div>
 

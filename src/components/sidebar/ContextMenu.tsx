@@ -38,6 +38,13 @@ export function ContextMenu({
           </>
         )}
         <button onClick={action(onRename)}>✏️ Rename</button>
+        <button
+          onClick={action(() => {
+            navigator.clipboard.writeText(node.path);
+          })}
+        >
+          📋 Copy Path
+        </button>
         <button onClick={action(onDelete)} className="danger">
           🗑️ Delete
         </button>
