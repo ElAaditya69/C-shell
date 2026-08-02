@@ -16,6 +16,7 @@ import { LabReportModal } from './components/report/LabReportModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { CommandPalette, CommandAction } from './components/common/CommandPalette';
 import { SearchInFilesModal } from './components/common/SearchInFilesModal';
+import { SnippetsModal } from './components/common/SnippetsModal';
 import { useTabs } from './hooks/useTabs';
 import { useFileExplorer } from './hooks/useFileExplorer';
 import { useSettings } from './context/SettingsContext';
@@ -29,8 +30,13 @@ function App() {
   const [screenshotModalVisible, setScreenshotModalVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [snippetsModalVisible, setSnippetsModalVisible] = useState(false);
+  const [zenMode, setZenMode] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [splitView, setSplitView] = useState(false);
   const { settings } = useSettings();
   const editorRef = useRef<EditorHandle>(null);
+  const splitEditorRef = useRef<EditorHandle>(null);
   const terminalRef = useRef<TerminalPanelHandle>(null);
 
   const {
@@ -131,9 +137,34 @@ function App() {
     if (newPath) await openFile(newPath);
   };
 
+  /* Open a built-in example as a new untitled tab */
+  const openExample = (code: string, _filename: string) => {
+    newFile();
+    /* small delay to let the new tab mount, then set its code */
+    setTimeout(() => updateActiveCode(code), 50);
+  };
+
+  /* Detect if a file is Python and run accordingly */
+  const isPythonFile = (name: string) =>
+    name.endsWith('.py') || name.endsWith('.pyw');
+
   const runCode = async () => {
     if (!activeTab || !activeTab.path) {
       alert('Please save the file first!');
+      return;
+    }
+
+    if (isPythonFile(activeTab.name)) {
+      /* Python support — run via terminal */
+      setActivityState('running');
+      try {
+        await invoke('write_to_pty', {
+          data: `python3 "${activeTab.path}"\n`,
+        });
+      } catch {
+        alert('Failed to run Python file. Ensure python3 is in PATH.');
+      }
+      setActivityState('idle');
       return;
     }
 
@@ -221,6 +252,23 @@ function App() {
     };
   }, []);
 
+  /* Toggle Zen Mode */
+  const toggleZenMode = () => {
+    setZenMode((v) => !v);
+    setPresentationMode(false);
+  };
+
+  /* Toggle Presentation Mode */
+  const togglePresentationMode = () => {
+    setPresentationMode((v) => !v);
+    setZenMode(false);
+  };
+
+  /* Toggle Split Editor View */
+  const toggleSplitView = () => {
+    setSplitView((v) => !v);
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (quickOpenVisible) return;
@@ -235,6 +283,27 @@ function App() {
         const direction = e.shiftKey ? -1 : 1;
         const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
         setActiveTabId(tabs[nextIndex].id);
+        return;
+      }
+
+      /* Zen Mode: Ctrl+K Z */
+      if (mod && key === 'k') {
+        e.preventDefault();
+        const handleZ = (e2: KeyboardEvent) => {
+          if (e2.key.toLowerCase() === 'z') {
+            e2.preventDefault();
+            toggleZenMode();
+          }
+          window.removeEventListener('keydown', handleZ);
+        };
+        window.addEventListener('keydown', handleZ);
+        return;
+      }
+
+      /* Escape exits Zen/Presentation mode */
+      if (key === 'escape' && (zenMode || presentationMode)) {
+        setZenMode(false);
+        setPresentationMode(false);
         return;
       }
 
@@ -306,7 +375,7 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tabs, activeTab, activeTabId, quickOpenVisible]);
+  }, [tabs, activeTab, activeTabId, quickOpenVisible, zenMode, presentationMode]);
 
   const handleSelectDiagnostic = (diag: { file: string; line: number; col: number }) => {
     const matchingTab = tabs.find((t) => t.name === diag.file || t.path?.endsWith(diag.file));
@@ -316,6 +385,10 @@ function App() {
     setTimeout(() => {
       editorRef.current?.jumpToPosition(diag.line, diag.col);
     }, 50);
+  };
+
+  const handleInsertSnippet = (text: string) => {
+    editorRef.current?.insertText(text);
   };
 
   const commandActions: CommandAction[] = [
@@ -336,13 +409,29 @@ function App() {
     { id: 'rebuild', label: '🔄 Rebuild Workspace', category: 'Build', perform: buildCode },
     { id: 'toggle-bookmark', label: '🔖 Toggle Line Bookmark', category: 'Navigation', shortcut: 'Ctrl+F2', perform: () => editorRef.current?.toggleBookmark() },
     { id: 'next-bookmark', label: '🔖 Jump to Next Bookmark', category: 'Navigation', shortcut: 'F2', perform: () => editorRef.current?.nextBookmark() },
+    { id: 'zen-mode', label: '🧘 Zen Mode', category: 'View', shortcut: 'Ctrl+K Z', perform: toggleZenMode },
+    { id: 'presentation-mode', label: '🎬 Presentation Mode', category: 'View', perform: togglePresentationMode },
+    { id: 'split-editor', label: '🪟 Toggle Split Editor', category: 'View', perform: toggleSplitView },
+    { id: 'snippets', label: '✂️ Insert Snippet', category: 'Edit', perform: () => setSnippetsModalVisible(true) },
   ];
 
+  const appClassName = [
+    'app retro-theme',
+    zenMode ? 'zen-mode' : '',
+    presentationMode ? 'presentation-mode' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className="app retro-theme">
+    <div className={appClassName}>
       <div className="titlebar">
         <span className="logo">⚡ C-SHELL</span>
-        <span className="subtitle">v0.3.0 — Professional Edition</span>
+        <span className="subtitle">
+          v0.4.0 — Professional Edition
+          {zenMode && ' • Zen Mode'}
+          {presentationMode && ' • Presentation Mode'}
+        </span>
       </div>
 
       {hasCrashBackup && (
@@ -425,18 +514,41 @@ function App() {
             />
 
             {activeTab ? (
-              <Editor
-                ref={editorRef}
-                code={activeTab.code}
-                fileName={activeTab.name}
-                onChange={updateActiveCode}
-              />
+              splitView ? (
+                <div className="split-editor-container">
+                  <div className="split-pane">
+                    <Editor
+                      ref={editorRef}
+                      code={activeTab.code}
+                      fileName={activeTab.name}
+                      onChange={updateActiveCode}
+                    />
+                  </div>
+                  <div className="split-divider" />
+                  <div className="split-pane">
+                    <Editor
+                      ref={splitEditorRef}
+                      code={activeTab.code}
+                      fileName={activeTab.name}
+                      onChange={updateActiveCode}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <Editor
+                  ref={editorRef}
+                  code={activeTab.code}
+                  fileName={activeTab.name}
+                  onChange={updateActiveCode}
+                />
+              )
             ) : (
               <WelcomeScreen
                 onNewFile={newFile}
                 onOpenFolder={handleOpenFolder}
                 onOpenFile={handleOpenFile}
                 onOpenRecent={loadDirectory}
+                onOpenExample={openExample}
               />
             )}
           </div>
@@ -462,7 +574,9 @@ function App() {
               ? '🟡 Formatting'
               : '🟡 Running'}
           </span>
-          <span>gcc • C99</span>
+          <span>
+            {activeTab && isPythonFile(activeTab.name) ? 'Python' : 'gcc • C99'}
+          </span>
         </div>
       )}
 
@@ -507,6 +621,13 @@ function App() {
           files={files}
           onSelectFile={openFile}
           onClose={() => setSearchModalVisible(false)}
+        />
+      )}
+
+      {snippetsModalVisible && (
+        <SnippetsModal
+          onInsert={handleInsertSnippet}
+          onClose={() => setSnippetsModalVisible(false)}
         />
       )}
     </div>

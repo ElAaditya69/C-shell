@@ -33,6 +33,7 @@ export interface EditorHandle {
   openSymbolPicker: () => void;
   toggleBookmark: () => void;
   nextBookmark: () => void;
+  insertText: (text: string) => void;
 }
 
 interface SymbolItem {
@@ -150,6 +151,16 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     },
     toggleBookmark,
     nextBookmark,
+    insertText: (text: string) => {
+      const view = viewRef.current;
+      if (!view) return;
+      const pos = view.state.selection.main.head;
+      view.dispatch({
+        changes: { from: pos, insert: text },
+        selection: { anchor: pos + text.length },
+      });
+      view.focus();
+    },
   }));
 
   const indentExtension = settings.useTabsIndent

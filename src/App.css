@@ -1113,3 +1113,176 @@ body {
 .diagnostics-panel {
   background: var(--bg-primary);
 }
+
+/* ===== ZEN MODE ===== */
+.app.zen-mode .titlebar,
+.app.zen-mode .file-tree,
+.app.zen-mode .statusbar,
+.app.zen-mode .terminal-panel,
+.app.zen-mode .toolbar {
+  display: none !important;
+}
+
+.app.zen-mode .main-container {
+  display: block;
+}
+
+.app.zen-mode .editor-panel {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.app.zen-mode .editor-wrapper {
+  height: 100%;
+}
+
+/* ===== PRESENTATION MODE ===== */
+.app.presentation-mode .file-tree,
+.app.presentation-mode .terminal-panel,
+.app.presentation-mode .statusbar {
+  display: none !important;
+}
+
+.app.presentation-mode .main-container {
+  display: block;
+}
+
+.app.presentation-mode .editor-panel {
+  width: 100%;
+}
+
+.app.presentation-mode .cm-editor .cm-content {
+  font-size: 22px !important;
+  line-height: 1.7 !important;
+}
+
+.app.presentation-mode .toolbar {
+  font-size: 16px;
+}
+
+/* ===== SPLIT EDITOR ===== */
+.split-editor-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.split-editor-container > .split-pane {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.split-editor-container > .split-divider {
+  width: 4px;
+  background: var(--border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.split-editor-container > .split-divider:hover {
+  background: var(--accent);
+}
+
+/* ===== BUILT-IN EXAMPLES ===== */
+.welcome-examples {
+  margin-top: 18px;
+  text-align: left;
+}
+
+.welcome-examples h4 {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.example-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.example-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.example-item .example-icon {
+  font-size: 16px;
+}
+
+.example-item .example-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.example-item .example-desc {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: auto;
+}
+
+/* ===== SNIPPETS MODAL ===== */
+.snippets-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  z-index: 200;
+}
+
+.snippets-modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 520px;
+  max-height: 420px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.snippets-modal .snippet-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+
+.snippets-modal .snippet-item:hover {
+  background: var(--bg-hover);
+}
+
+.snippets-modal .snippet-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.snippets-modal .snippet-prefix {
+  font-family: monospace;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-deep);
+  color: var(--accent);
+}

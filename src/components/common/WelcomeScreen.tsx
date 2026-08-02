@@ -1,10 +1,12 @@
 import { useSettings } from "../../context/SettingsContext";
+import { BUILT_IN_EXAMPLES } from "../../data/examples";
 
 interface WelcomeScreenProps {
   onNewFile: () => void;
   onOpenFolder: () => void;
   onOpenFile: () => void;
   onOpenRecent: (path: string) => void;
+  onOpenExample?: (code: string, filename: string) => void;
 }
 
 export function WelcomeScreen({
@@ -12,6 +14,7 @@ export function WelcomeScreen({
   onOpenFolder,
   onOpenFile,
   onOpenRecent,
+  onOpenExample,
 }: WelcomeScreenProps) {
   const { settings } = useSettings();
   const recents = settings.recentProjects || [];
@@ -57,6 +60,22 @@ export function WelcomeScreen({
           </div>
         )}
 
+        {/* Built-in Examples */}
+        <div className="welcome-examples">
+          <h4>📚 Built-in Examples</h4>
+          {BUILT_IN_EXAMPLES.map((ex) => (
+            <div
+              key={ex.id}
+              className="example-item"
+              onClick={() => onOpenExample?.(ex.code, ex.filename)}
+            >
+              <span className="example-icon">{ex.icon}</span>
+              <span className="example-label">{ex.label}</span>
+              <span className="example-desc">{ex.description}</span>
+            </div>
+          ))}
+        </div>
+
         <div className="welcome-shortcuts">
           <kbd>Ctrl+Enter</kbd><span>Run Code</span>
           <kbd>Ctrl+S</kbd><span>Save</span>
@@ -64,6 +83,7 @@ export function WelcomeScreen({
           <kbd>Ctrl+Shift+P</kbd><span>Command Palette</span>
           <kbd>Ctrl+Shift+F</kbd><span>Format Code</span>
           <kbd>Ctrl+,</kbd><span>Preferences</span>
+          <kbd>Ctrl+K Z</kbd><span>Zen Mode</span>
           <kbd>Ctrl+Alt+S</kbd><span>Screenshot</span>
           <kbd>Ctrl+Alt+R</kbd><span>Lab Report</span>
         </div>
