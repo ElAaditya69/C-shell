@@ -106,6 +106,45 @@ body {
   gap: 2px;
   flex-wrap: wrap;
   align-items: center;
+  position: relative;
+}
+
+.explorer-view-btn {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+.explorer-view-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 5px);
+  right: 0;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.explorer-view-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.explorer-view-menu button:hover {
+  background: var(--bg-hover);
 }
 
 .icon-action-btn {
@@ -229,9 +268,12 @@ body {
 /* ===== EDITOR PANEL ===== */
 .editor-panel {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  overflow: hidden;
 }
 
 /* ===== TOOLBAR ===== */
@@ -346,6 +388,7 @@ body {
 /* ===== EDITOR ===== */
 .editor-wrapper {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -382,6 +425,7 @@ body {
 
 .editor-container {
   flex: 1;
+  min-height: 0;
   height: 100%;
   overflow: hidden;
   display: flex;
@@ -390,13 +434,22 @@ body {
 
 .editor-container .cm-editor {
   height: 100% !important;
+  max-height: 100% !important;
   background: var(--bg-primary) !important;
   flex: 1;
+  min-height: 0;
 }
 
 .editor-container .cm-scroller {
   overflow: auto !important;
   height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+}
+
+.editor-code-area {
+  min-width: 0;
+  touch-action: pan-y;
 }
 
 .editor-container .cm-gutters {
@@ -414,6 +467,7 @@ body {
   border-top: 2px solid var(--border);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .terminal-header {

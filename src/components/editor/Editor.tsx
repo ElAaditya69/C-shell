@@ -220,7 +220,20 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         </button>
       </div>
 
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <div
+        className="editor-code-area"
+        style={{ flex: 1, minHeight: 0, height: '100%', position: 'relative', overflow: 'hidden' }}
+        onWheel={(event) => {
+          const scroller = viewRef.current?.scrollDOM;
+          if (!scroller) return;
+
+          // Some desktop WebViews do not hand wheel events to CodeMirror when
+          // it is inside a resizable flex pane. Scroll its own element directly.
+          scroller.scrollTop += event.deltaY;
+          if (event.shiftKey) scroller.scrollLeft += event.deltaY;
+          event.preventDefault();
+        }}
+      >
         <CodeMirror
           value={code}
           height="100%"
@@ -233,16 +246,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
             crosshairCursor(),
             keymap.of([
               ...searchKeymap,
-              { key: 'Mod-Enter', run: () => true },
-              { key: 'Ctrl-Enter', run: () => true },
-              { key: 'Mod-/', run: (view) => { toggleLineComment(view); return true; } },
-              { key: 'Ctrl-/', run: (view) => { toggleLineComment(view); return true; } },
               { key: 'Mod-h', run: openSearchPanel },
               { key: 'Mod-g', run: gotoLine },
               { key: 'Alt-ArrowDown', run: moveLineDown },
               { key: 'Alt-ArrowUp', run: moveLineUp },
               { key: 'Shift-Alt-ArrowDown', run: copyLineDown },
-              { key: 'Mod-Shift-o', run: () => { setSymbolModalOpen(true); return true; } },
             ]),
             indentExtension,
             ...(settings.wordWrap ? [EditorView.lineWrapping] : []),

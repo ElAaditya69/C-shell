@@ -174,7 +174,7 @@ export function useTabs() {
     tab: OpenTab,
     filePath: string,
     isNewId: boolean
-  ) => {
+  ): Promise<OpenTab> => {
     let cleanCode = tab.code
       .split("\n")
       .map((line) => line.trimEnd())
@@ -186,25 +186,29 @@ export function useTabs() {
     await FileService.writeFile(filePath, cleanCode);
     const tabId = isNewId ? filePath : tab.id;
 
+    const updatedTab: OpenTab = {
+      ...tab,
+      id: tabId,
+      path: filePath,
+      name: filePath.split(/[/\\]/).pop()!,
+      code: cleanCode,
+      savedCode: cleanCode,
+    };
+
     setTabs((prev) =>
       prev.map((t) =>
         t.id === tab.id
-          ? {
-              ...t,
-              id: tabId,
-              path: filePath,
-              name: filePath.split(/[/\\]/).pop()!,
-              code: cleanCode,
-              savedCode: cleanCode,
-            }
+          ? updatedTab
           : t
       )
     );
     setActiveTabId(tabId);
+    await addRecentFile(filePath);
+    return updatedTab;
   };
 
-  const saveFile = async (onSaved?: (dir: string) => void) => {
-    if (!activeTab) return;
+  const saveFile = async (onSaved?: (dir: string) => void): Promise<OpenTab | null> => {
+    if (!activeTab) return null;
 
     try {
       let filePath = activeTab.path;
@@ -212,31 +216,32 @@ export function useTabs() {
 
       if (!filePath) {
         filePath = await FileService.saveDialog();
-        if (!filePath) return;
-
-        await FileService.createFile(filePath);
+        if (!filePath) return null;
         isNewId = true;
       }
 
-      await writeAndUpdateTab(activeTab, filePath, isNewId);
-      onSaved?.(filePath.substring(0, filePath.lastIndexOf("/")));
+      const savedTab = await writeAndUpdateTab(activeTab, filePath, isNewId);
+      onSaved?.(filePath.substring(0, Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"))));
+      return savedTab;
     } catch (e) {
       alert(`Error saving: ${e}`);
+      return null;
     }
   };
 
-  const saveFileAs = async (onSaved?: (dir: string) => void) => {
-    if (!activeTab) return;
+  const saveFileAs = async (onSaved?: (dir: string) => void): Promise<OpenTab | null> => {
+    if (!activeTab) return null;
 
     try {
       const filePath = await FileService.saveDialog();
-      if (!filePath) return;
+      if (!filePath) return null;
 
-      await FileService.createFile(filePath);
-      await writeAndUpdateTab(activeTab, filePath, true);
-      onSaved?.(filePath.substring(0, filePath.lastIndexOf("/")));
+      const savedTab = await writeAndUpdateTab(activeTab, filePath, true);
+      onSaved?.(filePath.substring(0, Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"))));
+      return savedTab;
     } catch (e) {
       alert(`Error saving: ${e}`);
+      return null;
     }
   };
 

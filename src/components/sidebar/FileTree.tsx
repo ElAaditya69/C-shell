@@ -45,6 +45,7 @@ export function FileTree({
   const [showHidden, setShowHidden] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'type'>('name');
   const [density, setDensity] = useState<'compact' | 'comfortable'>('comfortable');
+  const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
   const [pinnedFolders, setPinnedFolders] = useState<string[]>([]);
 
   const draggingRef = useRef(false);
@@ -128,52 +129,28 @@ export function FileTree({
       <div className="file-tree-header">
         <span className="explorer-title">📂 EXPLORER</span>
         <div className="file-tree-header-actions">
-          {/* Eye Icon: Show/Hide Hidden Files */}
           <button
-            className={`icon-action-btn ${showHidden ? "active" : ""}`}
-            onClick={() => setShowHidden((v) => !v)}
-            title={showHidden ? "Hidden Files: SHOWN (Click to hide)" : "Hidden Files: HIDDEN (Click to show)"}
-            style={{
-              background: showHidden ? "rgba(255, 107, 53, 0.2)" : "transparent",
-              border: showHidden ? "1px solid var(--accent)" : "1px solid transparent",
-              borderRadius: "4px",
-              padding: "2px 5px",
-            }}
+            className="icon-action-btn explorer-view-btn"
+            onClick={() => setViewOptionsOpen((open) => !open)}
+            title="Explorer view options: hidden files, sorting, and spacing"
+            aria-expanded={viewOptionsOpen}
           >
-            👁️
+            ⚙ View
           </button>
 
-          {/* ABC Icon: Sort by Name vs Type */}
-          <button
-            className={`icon-action-btn ${sortBy === 'type' ? "active" : ""}`}
-            onClick={() => setSortBy((s) => (s === 'name' ? 'type' : 'name'))}
-            title={sortBy === 'type' ? "Sort: BY FILE EXTENSION (Click for By Name)" : "Sort: BY NAME A-Z (Click for By Extension)"}
-            style={{
-              background: sortBy === 'type' ? "rgba(255, 176, 0, 0.2)" : "transparent",
-              border: sortBy === 'type' ? "1px solid var(--text-primary)" : "1px solid transparent",
-              borderRadius: "4px",
-              padding: "2px 5px",
-              fontWeight: 600,
-              fontSize: "11px",
-            }}
-          >
-            {sortBy === 'name' ? "🔤" : "🏷️"}
-          </button>
-
-          {/* Density Icon: Compact vs Comfortable */}
-          <button
-            className={`icon-action-btn ${density === 'compact' ? "active" : ""}`}
-            onClick={() => setDensity((d) => (d === 'compact' ? 'comfortable' : 'compact'))}
-            title={density === 'compact' ? "Density: COMPACT (Click for Comfortable)" : "Density: COMFORTABLE (Click for Compact)"}
-            style={{
-              background: density === 'compact' ? "rgba(0, 255, 136, 0.15)" : "transparent",
-              border: density === 'compact' ? "1px solid var(--success)" : "1px solid transparent",
-              borderRadius: "4px",
-              padding: "2px 5px",
-            }}
-          >
-            🪟
-          </button>
+          {viewOptionsOpen && (
+            <div className="explorer-view-menu" role="menu">
+              <button role="menuitem" onClick={() => setShowHidden((value) => !value)}>
+                {showHidden ? "✓ Show hidden files" : "Show hidden files"}
+              </button>
+              <button role="menuitem" onClick={() => setSortBy((value) => value === 'name' ? 'type' : 'name')}>
+                Sort: {sortBy === 'name' ? 'Name (A–Z)' : 'File type'}
+              </button>
+              <button role="menuitem" onClick={() => setDensity((value) => value === 'compact' ? 'comfortable' : 'compact')}>
+                Spacing: {density === 'compact' ? 'Compact' : 'Comfortable'}
+              </button>
+            </div>
+          )}
 
           {/* Open Folder */}
           <button

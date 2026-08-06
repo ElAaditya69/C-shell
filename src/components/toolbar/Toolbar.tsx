@@ -53,7 +53,7 @@ export function Toolbar({
   const buildLabel =
     activityState === "building"
       ? showLabels ? "⏳ Building..." : "⏳"
-      : showLabels ? "🔨 Build" : "🔨";
+      : showLabels ? "🔨 Check Code" : "🔨";
 
   const toolsAction = (fn: () => void) => () => {
     fn();
@@ -77,7 +77,7 @@ export function Toolbar({
             className="tool-btn"
             onClick={onBuild}
             disabled={busy}
-            title="Build Executable"
+            title="Compile and check for errors without running the program"
           >
             {buildLabel}
           </button>
@@ -104,7 +104,7 @@ export function Toolbar({
               />
               <div className="context-menu tools-menu">
                 <button onClick={toolsAction(onFormat)} disabled={busy}>
-                  ✨ Format (Ctrl+Shift+F)
+                  ✨ Format code (clean indentation) — Ctrl+Shift+F
                 </button>
                 <button onClick={toolsAction(onScreenshot)}>
                   📸 Snapshot (Ctrl+Alt+S)

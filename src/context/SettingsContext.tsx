@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { THEMES } from "./themes";
 
@@ -54,6 +54,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 interface SettingsContextType {
   settings: AppSettings;
+  isSettingsLoaded: boolean;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
   addRecentProject: (folderPath: string) => Promise<void>;
   addRecentFile: (filePath: string) => Promise<void>;
@@ -61,6 +62,7 @@ interface SettingsContextType {
 
 const SettingsContext = createContext<SettingsContextType>({
   settings: DEFAULT_SETTINGS,
+  isSettingsLoaded: false,
   updateSettings: async () => {},
   addRecentProject: async () => {},
   addRecentFile: async () => {},
@@ -76,6 +78,19 @@ export function applyThemeVariables(themeKey: string) {
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
+  const saveQueue = useRef(Promise.resolve());
+
+  const persistSettings = useCallback((next: AppSettings) => {
+    // Settings changes often happen back-to-back (open file → open tab → recent
+    // list). Queue writes so an older snapshot cannot overwrite a newer one.
+    saveQueue.current = saveQueue.current
+      .catch(() => undefined)
+      .then(() => invoke("save_settings", { settingsJson: JSON.stringify(next) }));
+    saveQueue.current.catch((err) =>
+      console.error("Failed to save settings:", err)
+    );
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -92,52 +107,50 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error("Failed to load settings:", err);
         applyThemeVariables(DEFAULT_SETTINGS.theme);
+      } finally {
+        setIsSettingsLoaded(true);
       }
     })();
   }, []);
 
-  const updateSettings = async (partial: Partial<AppSettings>) => {
+  const updateSettings = useCallback(async (partial: Partial<AppSettings>) => {
+    // Do not let startup effects overwrite the settings file before it loads.
+    if (!isSettingsLoaded) return;
     setSettings((prev) => {
       const next = { ...prev, ...partial };
       if (partial.theme) {
         applyThemeVariables(partial.theme);
       }
-      invoke("save_settings", { settingsJson: JSON.stringify(next) }).catch((err) =>
-        console.error("Failed to save settings:", err)
-      );
+      persistSettings(next);
       return next;
     });
-  };
+  }, [isSettingsLoaded, persistSettings]);
 
-  const addRecentProject = async (folderPath: string) => {
-    if (!folderPath) return;
+  const addRecentProject = useCallback(async (folderPath: string) => {
+    if (!folderPath || !isSettingsLoaded) return;
     setSettings((prev) => {
       const filtered = (prev.recentProjects || []).filter((p) => p !== folderPath);
       const updated = [folderPath, ...filtered].slice(0, 10);
       const next = { ...prev, recentProjects: updated, lastDir: folderPath };
-      invoke("save_settings", { settingsJson: JSON.stringify(next) }).catch((err) =>
-        console.error("Failed to save settings:", err)
-      );
+      persistSettings(next);
       return next;
     });
-  };
+  }, [isSettingsLoaded, persistSettings]);
 
-  const addRecentFile = async (filePath: string) => {
-    if (!filePath) return;
+  const addRecentFile = useCallback(async (filePath: string) => {
+    if (!filePath || !isSettingsLoaded) return;
     setSettings((prev) => {
       const filtered = (prev.recentFiles || []).filter((f) => f !== filePath);
       const updated = [filePath, ...filtered].slice(0, 10);
       const next = { ...prev, recentFiles: updated };
-      invoke("save_settings", { settingsJson: JSON.stringify(next) }).catch((err) =>
-        console.error("Failed to save settings:", err)
-      );
+      persistSettings(next);
       return next;
     });
-  };
+  }, [isSettingsLoaded, persistSettings]);
 
   return (
     <SettingsContext.Provider
-      value={{ settings, updateSettings, addRecentProject, addRecentFile }}
+      value={{ settings, isSettingsLoaded, updateSettings, addRecentProject, addRecentFile }}
     >
       {children}
     </SettingsContext.Provider>

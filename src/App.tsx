@@ -34,7 +34,7 @@ function App() {
   const [zenMode, setZenMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [splitView, setSplitView] = useState(false);
-  const { settings } = useSettings();
+  const { settings, isSettingsLoaded } = useSettings();
   const editorRef = useRef<EditorHandle>(null);
   const splitEditorRef = useRef<EditorHandle>(null);
   const terminalRef = useRef<TerminalPanelHandle>(null);
@@ -74,7 +74,10 @@ function App() {
   const isRestoredRef = useRef(false);
 
   useEffect(() => {
-    if (isRestoredRef.current) return;
+    if (!isSettingsLoaded || isRestoredRef.current) return;
+    // Mark this before awaiting directory/file reads. Those reads update settings
+    // and re-render the app; without this guard restoration can start twice.
+    isRestoredRef.current = true;
     (async () => {
       try {
         const targetDir =
@@ -86,12 +89,11 @@ function App() {
             await openFile(path);
           }
         }
-        isRestoredRef.current = true;
       } catch {
         // Stay clean if loading fails
       }
     })();
-  }, [loadDirectory, settings.lastDir, settings.openTabs]);
+  }, [isSettingsLoaded, loadDirectory, openFile, settings.lastDir, settings.openTabs]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -115,11 +117,11 @@ function App() {
   };
 
   const handleSave = () => {
-    saveFile(loadDirectory);
+    void saveFile(loadDirectory);
   };
 
   const handleSaveAs = () => {
-    saveFileAs(loadDirectory);
+    void saveFileAs(loadDirectory);
   };
 
   const handleDelete = async (path: string, isDir: boolean) => {
@@ -149,22 +151,30 @@ function App() {
   const runCode = async () => {
     if (!activeTab) return;
 
-    if (!activeTab.path) {
-      alert('Please save the file before running.');
-      handleSaveAs();
-      return;
+    let tabToRun = activeTab;
+    if (!tabToRun.path) {
+      const shouldSave = window.confirm(
+        'This file must be saved before it can run. Save it now?'
+      );
+      if (!shouldSave) return;
+
+      const savedTab = await saveFileAs(loadDirectory);
+      if (!savedTab) return;
+      tabToRun = savedTab;
     }
 
-    if (activeTab.code !== activeTab.savedCode) {
-      await saveFile(loadDirectory);
+    if (tabToRun.code !== tabToRun.savedCode) {
+      const savedTab = await saveFile(loadDirectory);
+      if (!savedTab) return;
+      tabToRun = savedTab;
     }
 
-    if (isPythonFile(activeTab.name)) {
+    if (isPythonFile(tabToRun.name)) {
       /* Python support — run via terminal */
       setActivityState('running');
       try {
         await invoke('write_to_pty', {
-          data: `python3 "${activeTab.path}"\n`,
+          data: `python3 "${tabToRun.path}"\n`,
         });
       } catch {
         alert('Failed to run Python file. Ensure python3 is in PATH.');
@@ -175,7 +185,7 @@ function App() {
 
     setActivityState('compiling');
     try {
-      await CompileService.compileAndRun(activeTab.code, activeTab.path);
+      await CompileService.compileAndRun(tabToRun.code, tabToRun.path!);
       setActivityState('running');
     } catch (error) {
       alert(`Failed to run: ${error}`);
@@ -184,14 +194,25 @@ function App() {
   };
 
   const buildCode = async () => {
-    if (!activeTab || !activeTab.path) {
-      alert('Please save the file first!');
-      return;
+    if (!activeTab) return;
+    let tabToBuild = activeTab;
+    if (!tabToBuild.path) {
+      const shouldSave = window.confirm(
+        'This file must be saved before it can build. Save it now?'
+      );
+      if (!shouldSave) return;
+      const savedTab = await saveFileAs(loadDirectory);
+      if (!savedTab) return;
+      tabToBuild = savedTab;
+    } else if (tabToBuild.code !== tabToBuild.savedCode) {
+      const savedTab = await saveFile(loadDirectory);
+      if (!savedTab) return;
+      tabToBuild = savedTab;
     }
 
     setActivityState('building');
     try {
-      await CompileService.build(activeTab.code, activeTab.path);
+      await CompileService.build(tabToBuild.code, tabToBuild.path!);
     } catch (error) {
       alert(`Failed to build: ${error}`);
     }
@@ -278,6 +299,13 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (quickOpenVisible) return;
 
+      const target = e.target as HTMLElement | null;
+      const isDialogInput =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target?.isContentEditable && !target.classList.contains('cm-content'));
+      if (isDialogInput) return;
+
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
 
@@ -339,6 +367,7 @@ function App() {
       }
       if (mod && key === 'enter') {
         e.preventDefault();
+        e.stopPropagation();
         runCode();
         return;
       }
@@ -350,6 +379,12 @@ function App() {
       if (mod && key === 'n') {
         e.preventDefault();
         newFile();
+        return;
+      }
+      if (mod && e.shiftKey && key === 'o') {
+        e.preventDefault();
+        e.stopPropagation();
+        editorRef.current?.openSymbolPicker();
         return;
       }
       if (mod && !e.shiftKey && key === 'o') {
@@ -374,12 +409,15 @@ function App() {
       }
       if (mod && key === '/') {
         e.preventDefault();
+        e.stopPropagation();
         editorRef.current?.toggleComment();
         return;
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Capture before CodeMirror receives the event: Run must never insert a
+    // newline, and comment/symbol shortcuts must have one owner only.
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [tabs, activeTab, activeTabId, quickOpenVisible, zenMode, presentationMode]);
 
   const handleSelectDiagnostic = (diag: { file: string; line: number; col: number }) => {
@@ -433,7 +471,7 @@ function App() {
       <div className="titlebar">
         <span className="logo">⚡ C-SHELL</span>
         <span className="subtitle">
-          v0.4.0 — Professional Edition
+          v0.4.1 — Professional Edition
           {zenMode && ' • Zen Mode'}
           {presentationMode && ' • Presentation Mode'}
         </span>
