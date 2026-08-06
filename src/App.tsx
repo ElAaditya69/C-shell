@@ -471,7 +471,7 @@ function App() {
       <div className="titlebar">
         <span className="logo">⚡ C-SHELL</span>
         <span className="subtitle">
-          v0.4.1 — Professional Edition
+          v0.4.2 — Professional Edition
           {zenMode && ' • Zen Mode'}
           {presentationMode && ' • Presentation Mode'}
         </span>
