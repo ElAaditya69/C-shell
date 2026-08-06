@@ -6,6 +6,7 @@ interface WelcomeScreenProps {
   onOpenFolder: () => void;
   onOpenFile: () => void;
   onOpenRecent: (path: string) => void;
+  onOpenFileByPath?: (path: string) => void;
   onOpenExample?: (code: string, filename: string) => void;
 }
 
@@ -14,10 +15,12 @@ export function WelcomeScreen({
   onOpenFolder,
   onOpenFile,
   onOpenRecent,
+  onOpenFileByPath,
   onOpenExample,
 }: WelcomeScreenProps) {
   const { settings } = useSettings();
   const recents = settings.recentProjects || [];
+  const recentFiles = settings.recentFiles || [];
 
   return (
     <div className="welcome-screen">
@@ -51,9 +54,27 @@ export function WelcomeScreen({
                 className="welcome-recent-item"
                 onClick={() => onOpenRecent(p)}
               >
-                {p.split("/").pop() || p.split("\\").pop() || p}
-                <span style={{ marginLeft: "8px", opacity: 0.4, fontSize: "11px" }}>
+                {p.split(/[/\\]/).pop() || p}
+                <span style={{ marginLeft: "8px", opacity: 0.5, fontSize: "11px" }}>
                   {p}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {recentFiles.length > 0 && (
+          <div className="welcome-recent" style={{ marginTop: "12px" }}>
+            <h4>📄 Recent Files</h4>
+            {recentFiles.slice(0, 5).map((f) => (
+              <div
+                key={f}
+                className="welcome-recent-item"
+                onClick={() => onOpenFileByPath?.(f)}
+              >
+                {f.split(/[/\\]/).pop() || f}
+                <span style={{ marginLeft: "8px", opacity: 0.5, fontSize: "11px" }}>
+                  {f}
                 </span>
               </div>
             ))}

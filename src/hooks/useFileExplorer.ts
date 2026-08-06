@@ -40,8 +40,10 @@ export function useFileExplorer() {
     try {
       const file = await FileService.openFileDialog();
       if (!file) return null;
-      const dir = file.substring(0, file.lastIndexOf("/"));
-      await loadDirectory(dir);
+      const normalized = file.replace(/\\/g, "/");
+      const lastSlash = normalized.lastIndexOf("/");
+      const dir = lastSlash !== -1 ? normalized.substring(0, lastSlash) : normalized;
+      if (dir) await loadDirectory(dir);
       return file;
     } catch (e) {
       alert(`${e}`);
@@ -52,7 +54,8 @@ export function useFileExplorer() {
   const deleteFile = useCallback(
     async (path: string, isDir: boolean) => {
       const label = isDir ? "folder (and everything inside it)" : "file";
-      if (!confirm(`Delete this ${label}: ${path.split("/").pop()}?`)) {
+      const fileName = path.split(/[/\\]/).pop() || path;
+      if (!confirm(`Delete this ${label}: ${fileName}?`)) {
         return false;
       }
       try {

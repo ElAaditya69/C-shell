@@ -130,7 +130,7 @@ export function useTabs() {
       const newTab: OpenTab = {
         id: path,
         path,
-        name: path.split("/").pop() || path,
+        name: path.split(/[/\\]/).pop() || path,
         code: content,
         savedCode: content,
       };
@@ -193,7 +193,7 @@ export function useTabs() {
               ...t,
               id: tabId,
               path: filePath,
-              name: filePath.split("/").pop()!,
+              name: filePath.split(/[/\\]/).pop()!,
               code: cleanCode,
               savedCode: cleanCode,
             }

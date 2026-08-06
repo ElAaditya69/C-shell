@@ -147,9 +147,16 @@ function App() {
     name.endsWith('.py') || name.endsWith('.pyw');
 
   const runCode = async () => {
-    if (!activeTab || !activeTab.path) {
-      alert('Please save the file first!');
+    if (!activeTab) return;
+
+    if (!activeTab.path) {
+      alert('Please save the file before running.');
+      handleSaveAs();
       return;
+    }
+
+    if (activeTab.code !== activeTab.savedCode) {
+      await saveFile(loadDirectory);
     }
 
     if (isPythonFile(activeTab.name)) {
@@ -345,7 +352,7 @@ function App() {
         newFile();
         return;
       }
-      if (mod && key === 'o') {
+      if (mod && !e.shiftKey && key === 'o') {
         e.preventDefault();
         handleOpenFolder();
         return;
@@ -355,7 +362,7 @@ function App() {
         setCommandPaletteVisible((v) => !v);
         return;
       }
-      if (mod && key === 'p') {
+      if (mod && !e.shiftKey && key === 'p') {
         e.preventDefault();
         setQuickOpenVisible((v) => !v);
         return;
@@ -546,6 +553,7 @@ function App() {
                 onOpenFolder={handleOpenFolder}
                 onOpenFile={handleOpenFile}
                 onOpenRecent={loadDirectory}
+                onOpenFileByPath={openFile}
                 onOpenExample={openExample}
               />
             )}

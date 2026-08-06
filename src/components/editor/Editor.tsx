@@ -233,6 +233,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
             crosshairCursor(),
             keymap.of([
               ...searchKeymap,
+              { key: 'Mod-Enter', run: () => true },
+              { key: 'Ctrl-Enter', run: () => true },
+              { key: 'Mod-/', run: (view) => { toggleLineComment(view); return true; } },
+              { key: 'Ctrl-/', run: (view) => { toggleLineComment(view); return true; } },
               { key: 'Mod-h', run: openSearchPanel },
               { key: 'Mod-g', run: gotoLine },
               { key: 'Alt-ArrowDown', run: moveLineDown },
