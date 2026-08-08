@@ -24,6 +24,7 @@ interface EditorProps {
   code: string;
   fileName?: string;
   onChange: (value: string) => void;
+  onCursorChange?: (pos: { line: number; col: number }) => void;
 }
 
 export interface EditorHandle {
@@ -34,6 +35,7 @@ export interface EditorHandle {
   toggleBookmark: () => void;
   nextBookmark: () => void;
   insertText: (text: string) => void;
+  getCursorPosition: () => { line: number; col: number };
 }
 
 interface SymbolItem {
@@ -43,7 +45,7 @@ interface SymbolItem {
 }
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
-  { code, fileName = 'main.c', onChange },
+  { code, fileName = 'main.c', onChange, onCursorChange },
   ref
 ) {
   const viewRef = useRef<EditorViewType | null>(null);
@@ -51,6 +53,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   const [symbolModalOpen, setSymbolModalOpen] = useState(false);
   const [symbols, setSymbols] = useState<SymbolItem[]>([]);
   const [currentSymbol, setCurrentSymbol] = useState<string | null>(null);
+  // Keep the latest callback in a ref so the cursor-tracking extension is
+  // created once and never re-triggers @uiw's reconfigure effect.
+  const onCursorChangeRef = useRef(onCursorChange);
+  onCursorChangeRef.current = onCursorChange;
+  const lastCursorHeadRef = useRef(-1);
 
   // Parse symbols (functions and structs) from C code
   useEffect(() => {
@@ -162,6 +169,13 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       });
       view.focus();
     },
+    getCursorPosition: () => {
+      const view = viewRef.current;
+      if (!view) return { line: 1, col: 1 };
+      const pos = view.state.selection.main.head;
+      const line = view.state.doc.lineAt(pos);
+      return { line: line.number, col: pos - line.from + 1 };
+    },
   }));
 
   const indentExtension = settings.useTabsIndent
@@ -222,17 +236,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
 
       <div
         className="editor-code-area"
-        style={{ flex: 1, minHeight: 0, height: '100%', position: 'relative', overflow: 'hidden' }}
-        onWheel={(event) => {
-          const scroller = viewRef.current?.scrollDOM;
-          if (!scroller) return;
-
-          // Some desktop WebViews do not hand wheel events to CodeMirror when
-          // it is inside a resizable flex pane. Scroll its own element directly.
-          scroller.scrollTop += event.deltaY;
-          if (event.shiftKey) scroller.scrollLeft += event.deltaY;
-          event.preventDefault();
-        }}
+        style={{ flex: 1, minHeight: 0, height: '100%', position: 'relative' }}
       >
         <CodeMirror
           value={code}
@@ -241,6 +245,18 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
           extensions={[
             cpp(),
             search({ top: true }),
+            EditorView.updateListener.of(() => {
+              const view = viewRef.current;
+              if (!view) return;
+              // Only react when the cursor actually moved. Reconfigure updates
+              // (e.g. font/theme changes) still fire this listener; skipping
+              // unchanged positions keeps reconfigures from re-rendering App.
+              const pos = view.state.selection.main.head;
+              if (lastCursorHeadRef.current === pos) return;
+              lastCursorHeadRef.current = pos;
+              const line = view.state.doc.lineAt(pos);
+              onCursorChangeRef.current?.({ line: line.number, col: pos - line.from + 1 });
+            }),
             drawSelection(),
             rectangularSelection(),
             crosshairCursor(),
@@ -258,6 +274,10 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
           onChange={onChange}
           onCreateEditor={(view) => {
             viewRef.current = view;
+            const pos = view.state.selection.main.head;
+            lastCursorHeadRef.current = pos;
+            const line = view.state.doc.lineAt(pos);
+            onCursorChangeRef.current?.({ line: line.number, col: pos - line.from + 1 });
           }}
           basicSetup={{
             lineNumbers: true,

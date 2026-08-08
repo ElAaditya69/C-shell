@@ -4,6 +4,33 @@ export interface ThemePreset {
   variables: Record<string, string>;
 }
 
+/** A user-created theme stored in settings (has no hardcoded CSS backing). */
+export interface CustomTheme {
+  id: string;
+  name: string;
+  variables: Record<string, string>;
+}
+
+/**
+ * The editable CSS custom properties. Order here defines the order shown in
+ * the custom theme editor.
+ */
+export const THEME_VARIABLES: { key: string; label: string }[] = [
+  { key: "--bg-primary", label: "App Background" },
+  { key: "--bg-secondary", label: "Sidebar / Panels" },
+  { key: "--bg-panel", label: "Panel Background" },
+  { key: "--bg-hover", label: "Hover Background" },
+  { key: "--bg-deep", label: "Deep Background" },
+  { key: "--text-primary", label: "Primary Text" },
+  { key: "--text-secondary", label: "Secondary Text" },
+  { key: "--text-dim", label: "Dim Text" },
+  { key: "--text-bright", label: "Bright Text" },
+  { key: "--accent", label: "Accent" },
+  { key: "--border", label: "Borders" },
+  { key: "--btn-primary", label: "Primary Button" },
+  { key: "--btn-primary-hover", label: "Button Hover" },
+];
+
 export const THEMES: Record<string, ThemePreset> = {
   retro: {
     id: "retro",

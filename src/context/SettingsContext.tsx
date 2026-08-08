@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { THEMES } from "./themes";
+import { THEMES, CustomTheme } from "./themes";
 
 export interface AppSettings {
   theme: string;
@@ -25,6 +25,7 @@ export interface AppSettings {
   explorerPosition: 'left' | 'right';
   terminalPosition: 'bottom' | 'right';
   userCss: string;
+  customThemes: CustomTheme[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -50,6 +51,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   explorerPosition: "left",
   terminalPosition: "bottom",
   userCss: "",
+  customThemes: [],
 };
 
 interface SettingsContextType {
@@ -58,6 +60,9 @@ interface SettingsContextType {
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
   addRecentProject: (folderPath: string) => Promise<void>;
   addRecentFile: (filePath: string) => Promise<void>;
+  removeRecentProject: (folderPath: string) => Promise<void>;
+  removeRecentFile: (filePath: string) => Promise<void>;
+  clearRecents: () => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType>({
@@ -66,14 +71,50 @@ const SettingsContext = createContext<SettingsContextType>({
   updateSettings: async () => {},
   addRecentProject: async () => {},
   addRecentFile: async () => {},
+  removeRecentProject: async () => {},
+  removeRecentFile: async () => {},
+  clearRecents: async () => {},
 });
 
-export function applyThemeVariables(themeKey: string) {
-  const themePreset = THEMES[themeKey] || THEMES.retro;
-  const root = document.documentElement;
-  Object.entries(themePreset.variables).forEach(([varName, value]) => {
-    root.style.setProperty(varName, value);
-  });
+/** Resolve a theme key to its variable map, checking custom themes first. */
+export function resolveThemeVariables(
+  themeKey: string,
+  customThemes: CustomTheme[]
+): Record<string, string> | null {
+  const custom = customThemes.find((t) => t.id === themeKey);
+  if (custom) return custom.variables;
+  const preset = THEMES[themeKey];
+  return preset ? preset.variables : null;
+}
+
+export function applyThemeVariables(
+  themeKey: string,
+  customThemes?: CustomTheme[]
+) {
+  const vars = resolveThemeVariables(themeKey, customThemes || []);
+  if (vars) {
+    const root = document.documentElement;
+    Object.entries(vars).forEach(([varName, value]) => {
+      root.style.setProperty(varName, value);
+    });
+  }
+}
+
+const USER_CSS_ID = "c-shell-user-css";
+
+/** Injects or removes the user's custom CSS via a <style> element. */
+export function applyUserCss(userCss: string | undefined) {
+  let style = document.getElementById(USER_CSS_ID) as HTMLStyleElement | null;
+  if (userCss && userCss.trim().length > 0) {
+    if (!style) {
+      style = document.createElement("style");
+      style.id = USER_CSS_ID;
+      document.head.appendChild(style);
+    }
+    style.textContent = userCss;
+  } else if (style) {
+    style.remove();
+  }
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -98,11 +139,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const json = await invoke<string>("load_settings");
         if (json && json !== "{}") {
           const parsed = JSON.parse(json);
-          const merged = { ...DEFAULT_SETTINGS, ...parsed };
+          const merged = {
+            ...DEFAULT_SETTINGS,
+            ...parsed,
+            customThemes: Array.isArray(parsed.customThemes)
+              ? parsed.customThemes
+              : [],
+          };
           setSettings(merged);
-          applyThemeVariables(merged.theme);
+          applyThemeVariables(merged.theme, merged.customThemes);
+          applyUserCss(merged.userCss);
         } else {
-          applyThemeVariables(DEFAULT_SETTINGS.theme);
+          applyThemeVariables(DEFAULT_SETTINGS.theme, []);
         }
       } catch (err) {
         console.error("Failed to load settings:", err);
@@ -118,8 +166,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (!isSettingsLoaded) return;
     setSettings((prev) => {
       const next = { ...prev, ...partial };
-      if (partial.theme) {
-        applyThemeVariables(partial.theme);
+      if (partial.theme || partial.customThemes) {
+        applyThemeVariables(
+          partial.theme ?? next.theme,
+          partial.customThemes ?? next.customThemes
+        );
+      }
+      if (partial.userCss !== undefined) {
+        applyUserCss(partial.userCss);
       }
       persistSettings(next);
       return next;
@@ -148,9 +202,51 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, [isSettingsLoaded, persistSettings]);
 
+  const removeRecentProject = useCallback(async (folderPath: string) => {
+    if (!folderPath || !isSettingsLoaded) return;
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        recentProjects: (prev.recentProjects || []).filter((p) => p !== folderPath),
+      };
+      persistSettings(next);
+      return next;
+    });
+  }, [isSettingsLoaded, persistSettings]);
+
+  const removeRecentFile = useCallback(async (filePath: string) => {
+    if (!filePath || !isSettingsLoaded) return;
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        recentFiles: (prev.recentFiles || []).filter((f) => f !== filePath),
+      };
+      persistSettings(next);
+      return next;
+    });
+  }, [isSettingsLoaded, persistSettings]);
+
+  const clearRecents = useCallback(async () => {
+    if (!isSettingsLoaded) return;
+    setSettings((prev) => {
+      const next = { ...prev, recentProjects: [], recentFiles: [] };
+      persistSettings(next);
+      return next;
+    });
+  }, [isSettingsLoaded, persistSettings]);
+
   return (
     <SettingsContext.Provider
-      value={{ settings, isSettingsLoaded, updateSettings, addRecentProject, addRecentFile }}
+      value={{
+        settings,
+        isSettingsLoaded,
+        updateSettings,
+        addRecentProject,
+        addRecentFile,
+        removeRecentProject,
+        removeRecentFile,
+        clearRecents,
+      }}
     >
       {children}
     </SettingsContext.Provider>

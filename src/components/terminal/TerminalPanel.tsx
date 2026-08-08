@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { XTermView, XTermHandle } from "./XTermView";
 import { DiagnosticsPanel, Diagnostic } from "./DiagnosticsPanel";
 import { useSettings } from "../../context/SettingsContext";
@@ -14,6 +14,11 @@ const CLOSED_HEIGHT = 32;
 export interface TerminalPanelHandle {
   getTerminalBuffer: () => string;
   clear: () => void;
+  /** Make the terminal visible (mounted) so it can be used / output shown. */
+  show: () => void;
+  /** Toggle between collapsed (32px) and expanded. */
+  toggle: () => void;
+  isVisible: () => boolean;
 }
 
 interface TerminalPanelProps {
@@ -23,18 +28,44 @@ interface TerminalPanelProps {
 export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>(function TerminalPanel({ onSelectDiagnostic }, ref) {
   const { settings, updateSettings } = useSettings();
   const [height, setHeight] = useState(settings.terminalHeight || 200);
-  const [mode, setMode] = useState<Mode>("normal");
+  // Starts collapsed so no shell is spawned until the user actually runs
+  // something or opens the terminal (VS Code-like lazy startup).
+  const [mode, setMode] = useState<Mode>("closed");
+  const [started, setStarted] = useState(false);
   const [activeTab, setActiveTab] = useState<PanelTab>("terminal");
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const draggingRef = useRef(false);
   const heightRef = useRef(height);
   heightRef.current = height;
   const xtermRef = useRef<XTermHandle>(null);
+  const modeRef = useRef<Mode>(mode);
+  modeRef.current = mode;
+  const startedRef = useRef(false);
 
-  useImperativeHandle(ref, () => ({
-    getTerminalBuffer: () => xtermRef.current?.getBufferText() || "",
-    clear: () => xtermRef.current?.clear(),
-  }));
+  const showTerminal = useCallback(() => {
+    startedRef.current = true;
+    setStarted(true);
+    setMode((m) => (m === "closed" ? "normal" : m));
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getTerminalBuffer: () => xtermRef.current?.getBufferText() || "",
+      clear: () => xtermRef.current?.clear(),
+      show: showTerminal,
+      toggle: () => {
+        // If never shown yet, opening the terminal starts it.
+        if (!startedRef.current) {
+          showTerminal();
+          return;
+        }
+        setMode((m) => (m === "closed" ? (modeRef.current === "closed" ? "normal" : modeRef.current) : "closed"));
+      },
+      isVisible: () => modeRef.current !== "closed",
+    }),
+    [showTerminal]
+  );
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -43,13 +74,15 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
         setDiagnostics(e.payload || []);
         if (e.payload && e.payload.length > 0) {
           setActiveTab("problems");
+          // Surface diagnostics even if the terminal has never been opened.
+          showTerminal();
         }
       });
     })();
     return () => {
       unlisten?.();
     };
-  }, []);
+  }, [showTerminal]);
 
   useEffect(() => {
     if (settings.terminalHeight) {
@@ -96,6 +129,11 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
       : mode === "maximized"
       ? Math.round(window.innerHeight * 0.7)
       : height;
+
+  // Fully hidden until the user runs a program or opens the terminal — no
+  // shell process is spawned at startup (VS Code-like). "closed" collapses to
+  // a 32px header, but while !started we render nothing at all.
+  if (!started) return null;
 
   return (
     <div className="terminal-panel" style={{ height: panelHeight }}>
@@ -198,7 +236,24 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
         }}
       >
         {activeTab === "terminal" ? (
-          <XTermView ref={xtermRef} />
+          // The PTY shell only spawns once the terminal is first shown.
+          started ? (
+            <XTermView ref={xtermRef} />
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-dim)",
+                fontSize: "13px",
+                minHeight: MIN_HEIGHT,
+              }}
+            >
+              ▶ Run a program to start the terminal
+            </div>
+          )
         ) : (
           <DiagnosticsPanel
             diagnostics={diagnostics}

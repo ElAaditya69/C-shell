@@ -18,7 +18,8 @@ export function WelcomeScreen({
   onOpenFileByPath,
   onOpenExample,
 }: WelcomeScreenProps) {
-  const { settings } = useSettings();
+  const { settings, removeRecentProject, removeRecentFile, clearRecents } =
+    useSettings();
   const recents = settings.recentProjects || [];
   const recentFiles = settings.recentFiles || [];
 
@@ -47,17 +48,45 @@ export function WelcomeScreen({
 
         {recents.length > 0 && (
           <div className="welcome-recent">
-            <h4>📂 Recent Projects</h4>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4 style={{ marginBottom: "10px" }}>📂 Recent Projects</h4>
+              <button
+                className="welcome-clear-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearRecents();
+                }}
+                title="Clear all recent items"
+              >
+                ✕ Clear all
+              </button>
+            </div>
             {recents.slice(0, 5).map((p) => (
               <div
                 key={p}
                 className="welcome-recent-item"
                 onClick={() => onOpenRecent(p)}
               >
-                {p.split(/[/\\]/).pop() || p}
-                <span style={{ marginLeft: "8px", opacity: 0.5, fontSize: "11px" }}>
-                  {p}
+                <span className="welcome-recent-label">
+                  {p.split(/[/\\]/).pop() || p}
+                  <span className="welcome-recent-path">{p}</span>
                 </span>
+                <button
+                  className="welcome-recent-remove"
+                  title={`Remove ${p.split(/[/\\]/).pop() || p} from recents`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeRecentProject(p);
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             ))}
           </div>
@@ -65,17 +94,45 @@ export function WelcomeScreen({
 
         {recentFiles.length > 0 && (
           <div className="welcome-recent" style={{ marginTop: "12px" }}>
-            <h4>📄 Recent Files</h4>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4 style={{ marginBottom: "10px" }}>📄 Recent Files</h4>
+              <button
+                className="welcome-clear-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearRecents();
+                }}
+                title="Clear all recent items"
+              >
+                ✕ Clear all
+              </button>
+            </div>
             {recentFiles.slice(0, 5).map((f) => (
               <div
                 key={f}
                 className="welcome-recent-item"
                 onClick={() => onOpenFileByPath?.(f)}
               >
-                {f.split(/[/\\]/).pop() || f}
-                <span style={{ marginLeft: "8px", opacity: 0.5, fontSize: "11px" }}>
-                  {f}
+                <span className="welcome-recent-label">
+                  {f.split(/[/\\]/).pop() || f}
+                  <span className="welcome-recent-path">{f}</span>
                 </span>
+                <button
+                  className="welcome-recent-remove"
+                  title={`Remove ${f.split(/[/\\]/).pop() || f} from recents`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeRecentFile(f);
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             ))}
           </div>

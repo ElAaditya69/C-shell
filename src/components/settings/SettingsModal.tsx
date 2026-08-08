@@ -1,5 +1,5 @@
 import { useSettings } from "../../context/SettingsContext";
-import { THEMES } from "../../context/themes";
+import { THEMES, THEME_VARIABLES } from "../../context/themes";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -7,6 +7,45 @@ interface SettingsModalProps {
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { settings, updateSettings } = useSettings();
+  const customThemes = settings.customThemes || [];
+
+  /* ---- Custom theme helpers ---- */
+
+  const saveCustomTheme = (theme: {
+    id: string;
+    name: string;
+    variables: Record<string, string>;
+  }) => {
+    const exists = customThemes.some((t) => t.id === theme.id);
+    let next: typeof customThemes;
+    if (exists) {
+      next = customThemes.map((t) => (t.id === theme.id ? theme : t));
+    } else {
+      next = [...customThemes, theme];
+    }
+    updateSettings({ customThemes: next });
+  };
+
+  const deleteCustomTheme = (id: string) => {
+    const next = customThemes.filter((t) => t.id !== id);
+    updateSettings({ customThemes: next });
+    // If the active theme was deleted, fall back to the default.
+    if (settings.theme === id) {
+      updateSettings({ theme: "retro" });
+    }
+  };
+
+  const newCustomTheme = () => {
+    const base = THEMES.retro;
+    const id = `custom-${Date.now()}`;
+    const theme = {
+      id,
+      name: "New Theme",
+      variables: { ...base.variables },
+    };
+    saveCustomTheme(theme);
+    updateSettings({ theme: id });
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -25,9 +64,24 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="report-form-container" style={{ padding: "20px" }}>
           {/* Theme Selector */}
           <div className="form-group span-2" style={{ marginBottom: "18px" }}>
-            <label style={{ fontWeight: 600, marginBottom: "8px" }}>
-              Theme Palette
-            </label>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "8px",
+              }}
+            >
+              <label style={{ fontWeight: 600 }}>Theme Palette</label>
+              <button
+                className="action-btn secondary"
+                style={{ fontSize: "12px", padding: "4px 10px" }}
+                onClick={newCustomTheme}
+                title="Create a copy of the current palette as a new custom theme"
+              >
+                ➕ New Custom Theme
+              </button>
+            </div>
             <div
               style={{
                 display: "grid",
@@ -90,8 +144,185 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   </div>
                 );
               })}
+
+              {/* Custom themes created by the user */}
+              {customThemes.map((t) => {
+                const isActive = settings.theme === t.id;
+                const borderStyle = isActive
+                  ? "2px solid var(--accent)"
+                  : "2px solid var(--border)";
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => updateSettings({ theme: t.id })}
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: borderStyle,
+                      background: t.variables["--bg-secondary"],
+                      color: t.variables["--text-primary"],
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span style={{ fontSize: "13px", fontWeight: 600 }}>
+                      ✨ {t.name}
+                    </span>
+                    <div style={{ display: "flex", gap: "4px" }}>
+                      <span
+                        style={{
+                          width: "12px",
+                          height: "12px",
+                          borderRadius: "50%",
+                          background: t.variables["--bg-primary"],
+                          border: "1px solid rgba(255,255,255,0.2)",
+                        }}
+                      />
+                      <span
+                        style={{
+                          width: "12px",
+                          height: "12px",
+                          borderRadius: "50%",
+                          background: t.variables["--text-primary"],
+                        }}
+                      />
+                      <span
+                        style={{
+                          width: "12px",
+                          height: "12px",
+                          borderRadius: "50%",
+                          background: t.variables["--accent"],
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+
+          {/* Custom Theme Editor: shown when a custom theme is active */}
+          {customThemes.some((t) => t.id === settings.theme) &&
+            (() => {
+              const active = customThemes.find(
+                (t) => t.id === settings.theme
+              )!;
+              return (
+                <div
+                  className="form-group span-2"
+                  style={{
+                    marginBottom: "18px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    padding: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <label style={{ fontWeight: 600 }}>
+                      ✨ Custom Theme: {active.name}
+                    </label>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        className="action-btn secondary"
+                        style={{ fontSize: "12px", padding: "4px 10px" }}
+                        onClick={() => {
+                          const name = prompt("Theme name:", active.name);
+                          if (name && name.trim()) {
+                            saveCustomTheme({ ...active, name: name.trim() });
+                          }
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        className="action-btn danger"
+                        style={{ fontSize: "12px", padding: "4px 10px" }}
+                        onClick={() => {
+                          if (confirm(`Delete "${active.name}"?`)) {
+                            deleteCustomTheme(active.id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "6px 14px",
+                    }}
+                  >
+                    {THEME_VARIABLES.map(({ key, label }) => (
+                      <label
+                        key={key}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          fontSize: "12px",
+                          color: "var(--text-dim)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="color"
+                          value={active.variables[key] || "#000000"}
+                          onChange={(e) =>
+                            saveCustomTheme({
+                              ...active,
+                              variables: {
+                                ...active.variables,
+                                [key]: e.target.value,
+                              },
+                            })
+                          }
+                          style={{ width: "28px", height: "24px", border: "none", background: "none", padding: 0 }}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: "10px" }}>
+                    <label style={{ fontWeight: 600, fontSize: "13px" }}>
+                      Custom CSS
+                    </label>
+                    <textarea
+                      value={settings.userCss || ""}
+                      onChange={(e) =>
+                        updateSettings({ userCss: e.target.value })
+                      }
+                      placeholder={"/* Override any style here, e.g.\n.app { font-family: 'Fira Code'; } */"}
+                      rows={4}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        marginTop: "6px",
+                        padding: "8px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--border)",
+                        background: "var(--bg-primary)",
+                        color: "var(--text-primary)",
+                        fontFamily: "monospace",
+                        fontSize: "12px",
+                        resize: "vertical",
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
           {/* Editor Options */}
           <div className="form-group span-2" style={{ marginBottom: "16px" }}>

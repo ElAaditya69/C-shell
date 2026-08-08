@@ -427,9 +427,20 @@ body {
   flex: 1;
   min-height: 0;
   height: 100%;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* @uiw/react-codemirror wraps the editor in an unstyled .cm-theme div whose
+   height is `auto`. That breaks the percentage-height chain all the way down,
+   so .cm-scroller grows to the full content height instead of clamping to the
+   pane. Give the wrapper a real height so scrolling can actually happen. */
+.editor-container .cm-theme {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .editor-container .cm-editor {
@@ -448,6 +459,9 @@ body {
   max-height: 100% !important;
   min-height: 0 !important;
   scrollbar-gutter: stable;
+  /* Don't let the whole webview bounce when the editor hits top/bottom on a
+     macOS trackpad — contain the overscroll to the editor pane. */
+  overscroll-behavior: contain;
 }
 
 .editor-container .cm-scroller::-webkit-scrollbar {
@@ -882,6 +896,15 @@ body {
   background: transparent;
 }
 
+.action-btn.danger {
+  border-color: rgba(255, 51, 51, 0.4);
+  color: var(--error, #ff3333);
+}
+
+.action-btn.danger:hover {
+  background: rgba(255, 51, 51, 0.15);
+}
+
 /* Screenshot Modal Specifics */
 .screenshot-options {
   display: flex;
@@ -1229,11 +1252,68 @@ body {
   font-size: 12px;
   color: var(--text-dim);
   transition: background 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .welcome-recent-item:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.welcome-recent-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-recent-path {
+  margin-left: 8px;
+  opacity: 0.5;
+  font-size: 11px;
+}
+
+.welcome-recent-remove {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.welcome-recent-item:hover .welcome-recent-remove {
+  opacity: 1;
+}
+
+.welcome-recent-remove:hover {
+  color: var(--error, #ff3333);
+  background: rgba(255, 51, 51, 0.12);
+}
+
+.welcome-clear-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.welcome-clear-btn:hover {
+  color: var(--error, #ff3333);
+  border-color: var(--error, #ff3333);
 }
 
 /* ===== SETTINGS GEAR BUTTON ===== */
@@ -1264,14 +1344,17 @@ body {
   display: none !important;
 }
 
+/* Keep .main-container a flex row so the editor pane still gets a definite
+   height in zen/presentation mode; the hidden siblings just drop out. */
 .app.zen-mode .main-container {
-  display: block;
+  display: flex;
 }
 
 .app.zen-mode .editor-panel {
   width: 100%;
   max-width: 860px;
   margin: 0 auto;
+  height: 100%;
 }
 
 .app.zen-mode .editor-wrapper {
@@ -1286,11 +1369,16 @@ body {
 }
 
 .app.presentation-mode .main-container {
-  display: block;
+  display: flex;
 }
 
 .app.presentation-mode .editor-panel {
   width: 100%;
+  height: 100%;
+}
+
+.app.presentation-mode .editor-wrapper {
+  height: 100%;
 }
 
 .app.presentation-mode .cm-editor .cm-content {

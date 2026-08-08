@@ -217,6 +217,58 @@ int main() {
 `,
   },
   {
+    id: "functions",
+    label: "Functions",
+    icon: "🧩",
+    description: "Prototypes, params, return values & recursion",
+    filename: "functions.c",
+    code: `#include <stdio.h>
+
+// Function prototypes tell the compiler what's coming.
+int add(int a, int b);
+int factorial(int n);
+double square(double x);
+int max(int a, int b);
+void printGreeting(char name[]);
+
+int add(int a, int b) {
+    return a + b;                    // returns the sum
+}
+
+double square(double x) {
+    return x * x;                    // returns a double
+}
+
+void printGreeting(char name[]) {
+    printf("Hello, %s!\\n", name);   // returns nothing (void)
+}
+
+int max(int a, int b) {
+    return (a > b) ? a : b;
+}
+
+// A recursive function: a function that calls itself.
+int factorial(int n) {
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}
+
+int main() {
+    char user[] = "Coder";
+    printGreeting(user);
+
+    int x = 7, y = 12;
+    printf("add(%d, %d) = %d\\n", x, y, add(x, y));
+    printf("max(%d, %d) = %d\\n", x, y, max(x, y));
+    printf("square(%.1f) = %.1f\\n", 2.5, square(2.5));
+
+    int n = 5;
+    printf("factorial(%d) = %d\\n", n, factorial(n));
+    return 0;
+}
+`,
+  },
+  {
     id: "pointers",
     label: "Pointers & Memory",
     icon: "🧠",

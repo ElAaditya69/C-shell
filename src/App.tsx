@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { CompileService } from './services/CompileService';
+import { FileService } from './services/FileService';
 import { FormatService } from './services/FormatService';
 import { Editor, EditorHandle } from './components/editor/Editor';
 import { TabBar } from './components/editor/TabBar';
@@ -34,6 +35,10 @@ function App() {
   const [zenMode, setZenMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [splitView, setSplitView] = useState(false);
+  const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({
+    line: 1,
+    col: 1,
+  });
   const { settings, isSettingsLoaded } = useSettings();
   const editorRef = useRef<EditorHandle>(null);
   const splitEditorRef = useRef<EditorHandle>(null);
@@ -151,6 +156,9 @@ function App() {
   const runCode = async () => {
     if (!activeTab) return;
 
+    // Show the terminal so the user can see output as it starts.
+    terminalRef.current?.show();
+
     let tabToRun = activeTab;
     if (!tabToRun.path) {
       const shouldSave = window.confirm(
@@ -173,9 +181,7 @@ function App() {
       /* Python support — run via terminal */
       setActivityState('running');
       try {
-        await invoke('write_to_pty', {
-          data: `python3 "${tabToRun.path}"\n`,
-        });
+        await FileService.sendCommand(`python3 "${tabToRun.path}"\n`);
       } catch {
         alert('Failed to run Python file. Ensure python3 is in PATH.');
       }
@@ -195,6 +201,9 @@ function App() {
 
   const buildCode = async () => {
     if (!activeTab) return;
+    // Show the terminal so build output / diagnostics can be reviewed.
+    terminalRef.current?.show();
+
     let tabToBuild = activeTab;
     if (!tabToBuild.path) {
       const shouldSave = window.confirm(
@@ -413,6 +422,12 @@ function App() {
         editorRef.current?.toggleComment();
         return;
       }
+      /* Toggle Terminal: Ctrl+` */
+      if (mod && key === '`') {
+        e.preventDefault();
+        terminalRef.current?.toggle();
+        return;
+      }
     };
     // Capture before CodeMirror receives the event: Run must never insert a
     // newline, and comment/symbol shortcuts must have one owner only.
@@ -471,7 +486,7 @@ function App() {
       <div className="titlebar">
         <span className="logo">⚡ C-SHELL</span>
         <span className="subtitle">
-          v0.4.2 — Professional Edition
+          v0.5.0 — Professional Edition
           {zenMode && ' • Zen Mode'}
           {presentationMode && ' • Presentation Mode'}
         </span>
@@ -565,6 +580,7 @@ function App() {
                       code={activeTab.code}
                       fileName={activeTab.name}
                       onChange={updateActiveCode}
+                      onCursorChange={setCursorPos}
                     />
                   </div>
                   <div className="split-divider" />
@@ -583,6 +599,7 @@ function App() {
                   code={activeTab.code}
                   fileName={activeTab.name}
                   onChange={updateActiveCode}
+                  onCursorChange={setCursorPos}
                 />
               )
             ) : (
@@ -605,7 +622,9 @@ function App() {
         <div className="statusbar">
           <span>📁 {activeTab?.path || 'No file'}</span>
           <span>{currentDir || 'No folder'}</span>
-          <span>Ln 1, Col 1</span>
+          <span>
+            Ln {cursorPos.line}, Col {cursorPos.col}
+          </span>
           <span>UTF-8</span>
           <span>
             {activityState === 'idle'
