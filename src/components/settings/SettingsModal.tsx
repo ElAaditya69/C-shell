@@ -1,5 +1,6 @@
-import { useSettings } from "../../context/SettingsContext";
+import { useSettings, AppSettings } from "../../context/SettingsContext";
 import { THEMES, THEME_VARIABLES } from "../../context/themes";
+import { FileService } from "../../services/FileService";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -484,26 +485,42 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
             <button
               className="action-btn secondary"
-              onClick={() => {
-                const data = JSON.stringify(settings, null, 2);
-                navigator.clipboard.writeText(data);
-                alert("Settings exported to clipboard!");
+              onClick={async () => {
+                try {
+                  const dest = await FileService.saveJsonDialog("c-shell-settings.json");
+                  if (!dest) return;
+                  await FileService.writeFile(dest, JSON.stringify(settings, null, 2));
+                  alert("Settings exported successfully!");
+                } catch (e) {
+                  alert(`Export failed: ${e}`);
+                }
               }}
             >
               📤 Export Settings
             </button>
             <button
               className="action-btn secondary"
-              onClick={() => {
-                const input = prompt("Paste exported settings JSON:");
-                if (input) {
-                  try {
-                    const parsed = JSON.parse(input);
-                    updateSettings(parsed);
-                    alert("Settings imported successfully!");
-                  } catch (e) {
-                    alert("Invalid JSON data!");
+              onClick={async () => {
+                try {
+                  const file = await FileService.openJsonDialog();
+                  if (!file) return;
+                  const json = await FileService.readFile(file);
+                  const parsed = JSON.parse(json);
+                  if (typeof parsed !== "object" || parsed === null) {
+                    throw new Error("invalid settings object");
                   }
+                  // Only carry over known keys so an older/broken file can't
+                  // inject unknown state.
+                  const next: Partial<AppSettings> = {};
+                  for (const key of Object.keys(parsed) as (keyof AppSettings)[]) {
+                    if (key in settings) {
+                      (next as Record<string, unknown>)[key] = parsed[key];
+                    }
+                  }
+                  await updateSettings(next);
+                  alert("Settings imported successfully!");
+                } catch (e) {
+                  alert(`Import failed: ${e}`);
                 }
               }}
             >

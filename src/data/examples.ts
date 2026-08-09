@@ -26,7 +26,7 @@ int main() {
     id: "fibonacci",
     label: "Fibonacci Sequence",
     icon: "🔢",
-    description: "Iterative Fibonacci",
+    description: "Iterative approach",
     filename: "fibonacci.c",
     code: `#include <stdio.h>
 
@@ -219,7 +219,7 @@ int main() {
   {
     id: "functions",
     label: "Functions",
-    icon: "🧩",
+    icon: "⚙️",
     description: "Prototypes, params, return values & recursion",
     filename: "functions.c",
     code: `#include <stdio.h>
@@ -309,6 +309,42 @@ int main() {
     free(arr);
     free(greeting);
     printf("Memory freed successfully.\\n");
+
+    return 0;
+}
+`,
+  },
+  {
+    id: "structs",
+    label: "Structs",
+    icon: "🔣",
+    description: "Custom data structures",
+    filename: "structs.c",
+    code: `#include <stdio.h>
+#include <string.h>
+
+typedef struct {
+    char name[32];
+    int age;
+    double grade;
+} Student;
+
+typedef union {
+    int marks;
+    char grade;
+} Score;
+
+int main() {
+    Student s;
+    strcpy(s.name, "Ada");
+    s.age = 21;
+    s.grade = 3.8;
+
+    printf("Student: %s (age %d, GPA %.1f)\\n", s.name, s.age, s.grade);
+
+    Score sc;
+    sc.marks = 85;
+    printf("Score marks: %d\\n", sc.marks);
 
     return 0;
 }

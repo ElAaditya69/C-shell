@@ -1,5 +1,6 @@
 import { useSettings } from "../../context/SettingsContext";
 import { BUILT_IN_EXAMPLES } from "../../data/examples";
+import { Logo } from "./Logo";
 
 interface WelcomeScreenProps {
   onNewFile: () => void;
@@ -9,6 +10,15 @@ interface WelcomeScreenProps {
   onOpenFileByPath?: (path: string) => void;
   onOpenExample?: (code: string, filename: string) => void;
 }
+
+const SHORTCUTS: Array<{ keys: string; action: string }> = [
+  { keys: "Ctrl+Enter", action: "Run Code" },
+  { keys: "Ctrl+S", action: "Save" },
+  { keys: "Ctrl+P", action: "Quick Open" },
+  { keys: "Ctrl+Shift+P", action: "Command Palette" },
+  { keys: "Ctrl+Shift+F", action: "Format Code" },
+  { keys: "Ctrl+`", action: "Toggle Terminal" },
+];
 
 export function WelcomeScreen({
   onNewFile,
@@ -26,144 +36,171 @@ export function WelcomeScreen({
   return (
     <div className="welcome-screen">
       <div className="welcome-card">
-        <div className="welcome-logo">⚡</div>
-        <h2 style={{ color: "var(--text-primary)", marginBottom: "4px" }}>
-          C-SHELL
-        </h2>
-        <p className="welcome-tagline">
-          A modern, retro-styled C programming IDE
-        </p>
+        {/* Hero */}
+        <div className="welcome-hero">
+          <div className="welcome-hero-row">
+            <span className="welcome-logo">
+              <Logo size={34} />
+            </span>
+            <div>
+              <h1 className="welcome-title">C-SHELL</h1>
+              <p className="welcome-tagline">
+                A modern, retro-styled C programming environment
+              </p>
+            </div>
+          </div>
 
-        <div className="welcome-actions">
-          <button className="action-btn primary" onClick={onNewFile}>
-            📝 New File
-          </button>
-          <button className="action-btn secondary" onClick={onOpenFile}>
-            📄 Open File
-          </button>
-          <button className="action-btn secondary" onClick={onOpenFolder}>
-            📁 Open Folder
-          </button>
+          <div className="welcome-actions">
+            <button className="action-btn primary" onClick={onNewFile}>
+              + New File
+            </button>
+            <button className="action-btn secondary" onClick={onOpenFile}>
+              📄 Open File
+            </button>
+            <button className="action-btn secondary" onClick={onOpenFolder}>
+              📁 Open Folder
+            </button>
+          </div>
         </div>
 
-        {recents.length > 0 && (
-          <div className="welcome-recent">
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <h4 style={{ marginBottom: "10px" }}>📂 Recent Projects</h4>
-              <button
-                className="welcome-clear-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearRecents();
-                }}
-                title="Clear all recent items"
-              >
-                ✕ Clear all
-              </button>
-            </div>
-            {recents.slice(0, 5).map((p) => (
-              <div
-                key={p}
-                className="welcome-recent-item"
-                onClick={() => onOpenRecent(p)}
-              >
-                <span className="welcome-recent-label">
-                  {p.split(/[/\\]/).pop() || p}
-                  <span className="welcome-recent-path">{p}</span>
-                </span>
-                <button
-                  className="welcome-recent-remove"
-                  title={`Remove ${p.split(/[/\\]/).pop() || p} from recents`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeRecentProject(p);
-                  }}
-                >
-                  ✕
-                </button>
+        {/* Two-column layout */}
+        <div className="welcome-grid">
+          <div className="welcome-col">
+            {/* Recent projects */}
+            <section className="welcome-section">
+              <div className="welcome-section-header">
+                <div className="welcome-section-title">
+                  <span className="welcome-section-bar" />
+                  <span>Recent Projects</span>
+                </div>
+                {recents.length > 0 && (
+                  <button
+                    className="welcome-clear-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearRecents();
+                    }}
+                    title="Clear all recent items"
+                  >
+                    × Clear all
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-
-        {recentFiles.length > 0 && (
-          <div className="welcome-recent" style={{ marginTop: "12px" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <h4 style={{ marginBottom: "10px" }}>📄 Recent Files</h4>
-              <button
-                className="welcome-clear-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearRecents();
-                }}
-                title="Clear all recent items"
-              >
-                ✕ Clear all
-              </button>
-            </div>
-            {recentFiles.slice(0, 5).map((f) => (
-              <div
-                key={f}
-                className="welcome-recent-item"
-                onClick={() => onOpenFileByPath?.(f)}
-              >
-                <span className="welcome-recent-label">
-                  {f.split(/[/\\]/).pop() || f}
-                  <span className="welcome-recent-path">{f}</span>
-                </span>
-                <button
-                  className="welcome-recent-remove"
-                  title={`Remove ${f.split(/[/\\]/).pop() || f} from recents`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeRecentFile(f);
-                  }}
-                >
-                  ✕
-                </button>
+              <div className="welcome-recent-list">
+                {recents.slice(0, 5).map((p) => (
+                  <div
+                    key={p}
+                    className="welcome-recent-item"
+                    onClick={() => onOpenRecent(p)}
+                  >
+                    <span className="welcome-recent-icon">📁</span>
+                    <div className="welcome-recent-body">
+                      <div className="welcome-recent-name">
+                        {p.split(/[/\\]/).pop() || p}
+                      </div>
+                      <div className="welcome-recent-path">{p}</div>
+                    </div>
+                    <button
+                      className="welcome-recent-remove"
+                      title={`Remove ${p.split(/[/\\]/).pop() || p} from recents`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeRecentProject(p);
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            </section>
+
+            {recentFiles.length > 0 && (
+              <section className="welcome-section">
+                <div className="welcome-section-header">
+                  <div className="welcome-section-title">
+                    <span className="welcome-section-bar" />
+                    <span>Recent Files</span>
+                  </div>
+                </div>
+                <div className="welcome-recent-list">
+                  {recentFiles.slice(0, 5).map((f) => (
+                    <div
+                      key={f}
+                      className="welcome-recent-item"
+                      onClick={() => onOpenFileByPath?.(f)}
+                    >
+                      <span className="welcome-recent-icon">📄</span>
+                      <div className="welcome-recent-body">
+                        <div className="welcome-recent-name">
+                          {f.split(/[/\\]/).pop() || f}
+                        </div>
+                        <div className="welcome-recent-path">{f}</div>
+                      </div>
+                      <button
+                        className="welcome-recent-remove"
+                        title={`Remove ${f.split(/[/\\]/).pop() || f} from recents`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeRecentFile(f);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Keyboard shortcuts */}
+            <section className="welcome-section">
+              <div className="welcome-section-header">
+                <div className="welcome-section-title">
+                  <span className="welcome-section-bar" />
+                  <span>Keyboard Shortcuts</span>
+                </div>
+              </div>
+              <div className="keyboard-list">
+                {SHORTCUTS.map((s) => (
+                  <div className="keyboard-row" key={s.action}>
+                    <span className="keyboard-action">{s.action}</span>
+                    <kbd className="shortcut-kbd">{s.keys}</kbd>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
-        )}
 
-        {/* Built-in Examples */}
-        <div className="welcome-examples">
-          <h4>📚 Built-in Examples</h4>
-          {BUILT_IN_EXAMPLES.map((ex) => (
-            <div
-              key={ex.id}
-              className="example-item"
-              onClick={() => onOpenExample?.(ex.code, ex.filename)}
-            >
-              <span className="example-icon">{ex.icon}</span>
-              <span className="example-label">{ex.label}</span>
-              <span className="example-desc">{ex.description}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="welcome-shortcuts">
-          <kbd>Ctrl+Enter</kbd><span>Run Code</span>
-          <kbd>Ctrl+S</kbd><span>Save</span>
-          <kbd>Ctrl+P</kbd><span>Quick Open</span>
-          <kbd>Ctrl+Shift+P</kbd><span>Command Palette</span>
-          <kbd>Ctrl+Shift+F</kbd><span>Format Code</span>
-          <kbd>Ctrl+,</kbd><span>Preferences</span>
-          <kbd>Ctrl+K Z</kbd><span>Zen Mode</span>
-          <kbd>Ctrl+Alt+S</kbd><span>Screenshot</span>
-          <kbd>Ctrl+Alt+R</kbd><span>Lab Report</span>
+          {/* Built-in examples */}
+          <div className="welcome-col">
+            <section className="welcome-section">
+              <div className="welcome-section-header">
+                <div className="welcome-section-title">
+                  <span className="welcome-section-bar" />
+                  <span>Built-in Examples</span>
+                </div>
+              </div>
+              <div className="welcome-examples">
+                {BUILT_IN_EXAMPLES.map((ex) => (
+                  <div
+                    key={ex.id}
+                    className="example-item"
+                    onClick={() => onOpenExample?.(ex.code, ex.filename)}
+                  >
+                    <span className="example-icon">{ex.icon}</span>
+                    <div className="example-body">
+                      <div className="example-label">{ex.label}</div>
+                      <div className="example-desc">{ex.description}</div>
+                    </div>
+                    <span className="example-arrow" aria-hidden="true">
+                      →
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>

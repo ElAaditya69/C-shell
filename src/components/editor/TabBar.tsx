@@ -14,16 +14,15 @@ interface TabBarProps {
 }
 
 export function TabBar({ tabs, activeTabId, onSelect, onClose }: TabBarProps) {
-  if (tabs.length === 0) {
-    return (
-      <div className="tab-bar">
-        <div className="tab">No file open</div>
-      </div>
-    );
-  }
-
   return (
     <div className="tab-bar">
+      {tabs.length === 0 && (
+        <div className="tab active welcome-tab">
+          <span>
+            <span className="welcome-tab-icon">●</span> Welcome
+          </span>
+        </div>
+      )}
       {tabs.map((tab) => {
         const isDirty = tab.code !== tab.savedCode;
         return (

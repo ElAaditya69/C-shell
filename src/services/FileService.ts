@@ -48,11 +48,26 @@ export class FileService {
     });
   }
 
+  static async saveJsonDialog(defaultName: string): Promise<string | null> {
+    return await save({
+      defaultPath: defaultName,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+  }
+
   static async openFileDialog(): Promise<string | null> {
     return (await open({
       multiple: false,
       directory: false,
       filters: [{ name: "C Source", extensions: ["c", "h"] }],
+    })) as string | null;
+  }
+
+  static async openJsonDialog(): Promise<string | null> {
+    return (await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
     })) as string | null;
   }
 

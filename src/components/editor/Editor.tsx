@@ -1,6 +1,8 @@
-import { forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useMemo } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
-import { oneDark } from '@codemirror/theme-one-dark';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
+import { EditorView } from '@codemirror/view';
 import { cpp } from '@codemirror/lang-cpp';
 import {
   toggleLineComment,
@@ -15,9 +17,10 @@ import {
   gotoLine,
   openSearchPanel,
 } from '@codemirror/search';
-import { keymap, EditorView, rectangularSelection, crosshairCursor, drawSelection } from '@codemirror/view';
+import { keymap, rectangularSelection, crosshairCursor, drawSelection } from '@codemirror/view';
 import type { EditorView as EditorViewType } from '@codemirror/view';
 import { indentUnit } from '@codemirror/language';
+import type { Extension } from '@codemirror/state';
 import { useSettings } from '../../context/SettingsContext';
 
 interface EditorProps {
@@ -182,6 +185,68 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     ? indentUnit.of('\t')
     : indentUnit.of(' '.repeat(settings.tabSize || 4));
 
+  /* Theme the editor from the app's CSS variables (instead of the hardcoded
+     oneDark) so syntax colors follow theme changes, including custom themes.
+     Built from CSS var() references, so any value change restyles live. */
+  const editorTheme = useMemo<Extension>(
+    () =>
+      EditorView.theme(
+        {
+          '&': {
+            color: 'var(--text-primary)',
+            backgroundColor: 'var(--bg-primary)',
+          },
+          '.cm-content': { caretColor: 'var(--text-primary)' },
+          '&.cm-focused .cm-cursor': { borderLeftColor: 'var(--accent)' },
+          '.cm-cursor': { borderLeftColor: 'var(--accent)' },
+          '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+            backgroundColor: 'color-mix(in srgb, var(--accent) 30%, transparent)',
+          },
+          '.cm-activeLine': { backgroundColor: 'var(--bg-hover)' },
+          '.cm-activeLineGutter': {
+            backgroundColor: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+          },
+          '.cm-gutters': {
+            backgroundColor: 'var(--bg-secondary)',
+            color: 'var(--text-dim)',
+            borderRight: '1px solid var(--border)',
+          },
+          '.cm-matchingBracket': {
+            backgroundColor: 'color-mix(in srgb, var(--accent) 25%, transparent)',
+            color: 'var(--text-primary)',
+          },
+          '.cm-searchMatch': { backgroundColor: 'var(--bg-hover)' },
+        },
+        { dark: true }
+      ),
+    []
+  );
+
+  /* Amber-tinted retro syntax palette driven by the same CSS variables. */
+  const editorHighlight = useMemo(
+    () =>
+      syntaxHighlighting(
+        HighlightStyle.define([
+          { tag: t.comment, color: 'var(--text-dim)', fontStyle: 'italic' },
+          { tag: [t.keyword, t.modifier], color: 'var(--text-bright)' },
+          { tag: [t.name, t.deleted, t.character, t.propertyName, t.macroName], color: 'var(--text-secondary)' },
+          { tag: [t.function(t.variableName), t.labelName], color: 'var(--blue)' },
+          { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: 'var(--text-bright)' },
+          { tag: [t.definition(t.name), t.separator], color: 'var(--text-primary)' },
+          { tag: [t.typeName, t.className, t.number, t.changed, t.annotation, t.modifier, t.self, t.namespace], color: 'var(--blue)' },
+          { tag: [t.operator, t.operatorKeyword, t.url, t.escape, t.regexp, t.link, t.special(t.string)], color: 'var(--accent)' },
+          { tag: [t.meta, t.comment], color: 'var(--text-dim)' },
+          { tag: [t.strong], fontWeight: 'bold' },
+          { tag: [t.emphasis], fontStyle: 'italic' },
+          { tag: [t.strikethrough], textDecoration: 'line-through' },
+          { tag: [t.link, t.atom, t.bool, t.url], color: 'var(--blue)' },
+          { tag: [t.invalid], color: 'var(--error)' },
+          { tag: [t.string, t.inserted], color: 'var(--success)' },
+        ])
+      ),
+    []
+  );
+
   return (
     <div
       className="editor-container"
@@ -241,8 +306,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         <CodeMirror
           value={code}
           height="100%"
-          theme={oneDark}
+          theme={editorTheme}
           extensions={[
+            editorHighlight,
             cpp(),
             search({ top: true }),
             EditorView.updateListener.of(() => {

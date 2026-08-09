@@ -4,12 +4,11 @@ import { DiagnosticsPanel, Diagnostic } from "./DiagnosticsPanel";
 import { useSettings } from "../../context/SettingsContext";
 import { listen } from "@tauri-apps/api/event";
 
-type Mode = "normal" | "minimized" | "maximized" | "closed";
+type Mode = "normal" | "minimized" | "maximized";
 type PanelTab = "terminal" | "problems";
 
 const MIN_HEIGHT = 120;
 const MINIMIZED_HEIGHT = 80;
-const CLOSED_HEIGHT = 32;
 
 export interface TerminalPanelHandle {
   getTerminalBuffer: () => string;
@@ -30,7 +29,10 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
   const [height, setHeight] = useState(settings.terminalHeight || 200);
   // Starts collapsed so no shell is spawned until the user actually runs
   // something or opens the terminal (VS Code-like lazy startup).
-  const [mode, setMode] = useState<Mode>("closed");
+  // `visible` controls whether the whole panel is shown at all (true hide,
+  // not just a collapsed bar). `mode` controls the expanded/collapsed state.
+  const [visible, setVisible] = useState(false);
+  const [mode, setMode] = useState<Mode>("normal");
   const [started, setStarted] = useState(false);
   const [activeTab, setActiveTab] = useState<PanelTab>("terminal");
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
@@ -38,14 +40,15 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
   const heightRef = useRef(height);
   heightRef.current = height;
   const xtermRef = useRef<XTermHandle>(null);
-  const modeRef = useRef<Mode>(mode);
-  modeRef.current = mode;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const startedRef = useRef(false);
 
   const showTerminal = useCallback(() => {
     startedRef.current = true;
     setStarted(true);
-    setMode((m) => (m === "closed" ? "normal" : m));
+    setVisible(true);
+    setMode("normal");
   }, []);
 
   useImperativeHandle(
@@ -55,14 +58,15 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
       clear: () => xtermRef.current?.clear(),
       show: showTerminal,
       toggle: () => {
-        // If never shown yet, opening the terminal starts it.
+        // Opening the terminal (even for the first time) starts the shell
+        // immediately so it's usable for manual commands without running code.
         if (!startedRef.current) {
           showTerminal();
           return;
         }
-        setMode((m) => (m === "closed" ? (modeRef.current === "closed" ? "normal" : modeRef.current) : "closed"));
+        setVisible((v) => !v);
       },
-      isVisible: () => modeRef.current !== "closed",
+      isVisible: () => visibleRef.current,
     }),
     [showTerminal]
   );
@@ -124,16 +128,14 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
   const panelHeight =
     mode === "minimized"
       ? MINIMIZED_HEIGHT
-      : mode === "closed"
-      ? CLOSED_HEIGHT
       : mode === "maximized"
       ? Math.round(window.innerHeight * 0.7)
       : height;
 
-  // Fully hidden until the user runs a program or opens the terminal — no
-  // shell process is spawned at startup (VS Code-like). "closed" collapses to
-  // a 32px header, but while !started we render nothing at all.
-  if (!started) return null;
+  // Hidden until the user toggles the terminal open (toolbar button, Ctrl+`,
+  // or Run). Once opened the shell starts immediately so it's usable for
+  // manual commands — not just for running the current file.
+  if (!visible) return null;
 
   return (
     <div className="terminal-panel" style={{ height: panelHeight }}>
@@ -203,15 +205,15 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
           <div className="terminal-buttons">
             <span
               className="term-btn close"
-              title="Close"
+              title="Close terminal (Ctrl+` to reopen)"
               onClick={(e) => {
                 e.stopPropagation();
-                setMode(mode === "closed" ? "normal" : "closed");
+                setVisible(false);
               }}
             />
             <span
               className="term-btn minimize"
-              title="Minimize"
+              title="Minimize (collapse to a thin bar)"
               onClick={(e) => {
                 e.stopPropagation();
                 setMode(mode === "minimized" ? "normal" : "minimized");
@@ -219,7 +221,7 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
             />
             <span
               className="term-btn maximize"
-              title="Maximize"
+              title="Maximize (expand to fill the window)"
               onClick={(e) => {
                 e.stopPropagation();
                 setMode(mode === "maximized" ? "normal" : "maximized");
@@ -232,7 +234,7 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
       <div
         className="terminal-body-wrapper"
         style={{
-          display: mode === "minimized" || mode === "closed" ? "none" : "block",
+          display: mode === "minimized" ? "none" : "block",
         }}
       >
         {activeTab === "terminal" ? (

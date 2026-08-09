@@ -19,6 +19,7 @@ import { CommandPalette, CommandAction } from './components/common/CommandPalett
 import { SearchInFilesModal } from './components/common/SearchInFilesModal';
 import { SnippetsModal } from './components/common/SnippetsModal';
 import { useTabs } from './hooks/useTabs';
+import { Logo } from './components/common/Logo';
 import { useFileExplorer } from './hooks/useFileExplorer';
 import { useSettings } from './context/SettingsContext';
 import './App.css';
@@ -35,6 +36,7 @@ function App() {
   const [zenMode, setZenMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [splitView, setSplitView] = useState(false);
+  const [cStandard, setCStandard] = useState("c99");
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({
     line: 1,
     col: 1,
@@ -191,7 +193,7 @@ function App() {
 
     setActivityState('compiling');
     try {
-      await CompileService.compileAndRun(tabToRun.code, tabToRun.path!);
+      await CompileService.compileAndRun(tabToRun.code, tabToRun.path!, cStandard);
       setActivityState('running');
     } catch (error) {
       alert(`Failed to run: ${error}`);
@@ -221,7 +223,7 @@ function App() {
 
     setActivityState('building');
     try {
-      await CompileService.build(tabToBuild.code, tabToBuild.path!);
+      await CompileService.build(tabToBuild.code, tabToBuild.path!, cStandard);
     } catch (error) {
       alert(`Failed to build: ${error}`);
     }
@@ -484,12 +486,10 @@ function App() {
   return (
     <div className={appClassName}>
       <div className="titlebar">
-        <span className="logo">⚡ C-SHELL</span>
-        <span className="subtitle">
-          v0.5.0 — Professional Edition
-          {zenMode && ' • Zen Mode'}
-          {presentationMode && ' • Presentation Mode'}
+        <span className="logo">
+          <Logo size={20} /> C-SHELL
         </span>
+        <span className="subtitle">v0.6.0-beta.1 — Professional Edition</span>
       </div>
 
       {hasCrashBackup && (
@@ -558,8 +558,9 @@ function App() {
               onOpenFolder={handleOpenFolder}
               onOpenFile={handleOpenFile}
               onOpenSettings={() => setSettingsModalVisible(true)}
+              onToggleTerminal={() => terminalRef.current?.toggle()}
               activityState={activityState}
-              currentFile={activeTab?.path ?? null}
+              onStandardChange={(s) => setCStandard(s.toLowerCase())}
             />
           )}
 
@@ -620,25 +621,43 @@ function App() {
 
       {settings.showStatusBar !== false && (
         <div className="statusbar">
-          <span>📁 {activeTab?.path || 'No file'}</span>
-          <span>{currentDir || 'No folder'}</span>
-          <span>
-            Ln {cursorPos.line}, Col {cursorPos.col}
+          <span className="status-item">
+            📄 {activeTab?.path || 'No file'}
           </span>
-          <span>UTF-8</span>
-          <span>
-            {activityState === 'idle'
-              ? '🟢 Ready'
-              : activityState === 'compiling'
-              ? '🟡 Compiling'
-              : activityState === 'building'
-              ? '🟡 Building'
-              : activityState === 'formatting'
-              ? '🟡 Formatting'
-              : '🟡 Running'}
-          </span>
-          <span>
-            {activeTab && isPythonFile(activeTab.name) ? 'Python' : 'gcc • C99'}
+          <span className="status-item status-sep">|</span>
+          <span className="status-item">{currentDir || 'No folder'}</span>
+          <span className="statusbar-right">
+            <span className="status-item">
+              Ln {cursorPos.line}, Col {cursorPos.col}
+            </span>
+            <span className="status-sep">|</span>
+            <span className="status-item">UTF-8</span>
+            <span className="status-sep">|</span>
+            <span className="status-item">
+              {activityState === 'idle'
+                ? '• Ready'
+                : activityState === 'compiling'
+                ? '• Compiling'
+                : activityState === 'building'
+                ? '• Building'
+                : activityState === 'formatting'
+                ? '• Formatting'
+                : '• Running'}
+            </span>
+            <span className="status-sep">|</span>
+            <span className="status-item">
+              {activeTab && isPythonFile(activeTab.name)
+                ? 'Python'
+                : `gcc • ${cStandard.toUpperCase()}`}
+            </span>
+            <span className="status-sep">|</span>
+            <span
+              className="status-item status-help"
+              title="Keyboard shortcuts &amp; help"
+              onClick={() => setCommandPaletteVisible(true)}
+            >
+              ?
+            </span>
           </span>
         </div>
       )}

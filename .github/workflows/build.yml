@@ -109,4 +109,4 @@ jobs:
             echo "::error::No installer files found to publish"
             exit 1
           fi
-          gh release create "$GITHUB_REF_NAME" "${files[@]}" --title "C-Shell $GITHUB_REF_NAME" --generate-notes
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" --title "C-Shell $GITHUB_REF_NAME" --prerelease --generate-notes

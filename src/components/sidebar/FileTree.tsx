@@ -127,15 +127,31 @@ export function FileTree({
   return (
     <div className="file-tree" style={{ width }}>
       <div className="file-tree-header">
-        <span className="explorer-title">📂 EXPLORER</span>
+        <span className="explorer-title">EXPLORER</span>
         <div className="file-tree-header-actions">
+          <button
+            className="icon-action-btn"
+            onClick={onNewFile}
+            title="New File (Ctrl/Cmd+N)"
+          >
+            ⊞
+          </button>
+
+          <button
+            className="icon-action-btn"
+            onClick={onRefresh}
+            title="Refresh Explorer"
+          >
+            ↺
+          </button>
+
           <button
             className="icon-action-btn explorer-view-btn"
             onClick={() => setViewOptionsOpen((open) => !open)}
             title="Explorer view options: hidden files, sorting, and spacing"
             aria-expanded={viewOptionsOpen}
           >
-            ⚙ View
+            ⋯
           </button>
 
           {viewOptionsOpen && (
@@ -149,46 +165,12 @@ export function FileTree({
               <button role="menuitem" onClick={() => setDensity((value) => value === 'compact' ? 'comfortable' : 'compact')}>
                 Spacing: {density === 'compact' ? 'Compact' : 'Comfortable'}
               </button>
+              <div className="context-menu-divider" />
+              <button role="menuitem" onClick={onOpenFolder}>
+                📁 Open Folder
+              </button>
             </div>
           )}
-
-          {/* Open Folder */}
-          <button
-            className="icon-action-btn"
-            onClick={onOpenFolder}
-            title="Open Folder (Ctrl/Cmd+O)"
-          >
-            📁
-          </button>
-
-          {/* New File */}
-          <button
-            className="icon-action-btn"
-            onClick={onNewFile}
-            title="New File (Ctrl/Cmd+N)"
-          >
-            📝
-          </button>
-
-          {/* Refresh */}
-          <button
-            className="icon-action-btn"
-            onClick={onRefresh}
-            title="Refresh Explorer"
-          >
-            🔄
-          </button>
-
-          {/* Two Arrows: Collapse Sidebar */}
-          <button
-            className="icon-action-btn collapse-sidebar-btn"
-            onClick={() => setCollapsed(true)}
-            title="Collapse Sidebar Explorer"
-            aria-label="Collapse Explorer sidebar"
-          >
-            <span aria-hidden="true">«</span>
-            <span className="collapse-sidebar-btn-label">Collapse</span>
-          </button>
         </div>
       </div>
 
@@ -235,6 +217,16 @@ export function FileTree({
           ))
         )}
       </div>
+
+      <button
+        className="icon-action-btn sidebar-footer-btn"
+        onClick={() => setCollapsed(true)}
+        title="Collapse Sidebar Explorer"
+        aria-label="Collapse Explorer sidebar"
+      >
+        <span aria-hidden="true">«</span>
+        <span className="collapse-sidebar-btn-label">Collapse</span>
+      </button>
 
       <div className="file-tree-drag-handle" onMouseDown={startDrag} />
 

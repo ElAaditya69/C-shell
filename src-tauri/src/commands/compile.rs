@@ -83,12 +83,29 @@ struct BuildOutcome {
     binary_name: &'static str,
 }
 
+/// Whitelist of accepted C standards; gcc maps "GNU99" to "gnu99".
+fn standard_flag(standard: &str) -> String {
+    match standard.trim().to_ascii_lowercase() {
+        // Accept both "c99" (our canonical labels) and user-typed variants.
+        s if s == "gnu99" || s == "gnu17" || s == "gnu11" || s == "gnu89" || s == "c89" || s == "c11" || s == "c17" => s,
+        _ => "c99".to_string(),
+    }
+}
+
 /// Shared by build_only and compile_and_run: writes the source to a temp
 /// file, runs gcc, and emits colorized errors/warnings plus how long it
 /// took. Doesn't run the program — that's the caller's job, if any.
-fn build(app: &AppHandle, code: &str, filename: &str) -> Result<BuildOutcome, String> {
+fn build(
+    app: &AppHandle,
+    code: &str,
+    filename: &str,
+    standard: Option<String>,
+) -> Result<BuildOutcome, String> {
     let dir = temp_dir();
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let std_flag = standard
+        .map(|s| standard_flag(&s))
+        .unwrap_or_else(|| "c99".to_string());
 
     let base_name = Path::new(filename)
         .file_name()
@@ -112,8 +129,8 @@ fn build(app: &AppHandle, code: &str, filename: &str) -> Result<BuildOutcome, St
     let _ = fs::remove_file(&binary_path);
 
     emit(format!(
-        "\r\n$ gcc {} -o program -std=c99 -Wall\r\n",
-        base_name
+        "\r\n$ gcc {} -o program -std={} -Wall\r\n",
+        base_name, std_flag
     ));
 
     let start = Instant::now();
@@ -121,7 +138,9 @@ fn build(app: &AppHandle, code: &str, filename: &str) -> Result<BuildOutcome, St
         .arg(&file_path)
         .arg("-o")
         .arg(&binary_path)
-        .arg("-std=c99")
+        // Must be a single argument: gcc/clang reject "-std" and "c99"
+        // passed separately (the flag value would be parsed as a file).
+        .arg(format!("-std={}", std_flag))
         .arg("-Wall")
         .output()
         .map_err(|e| format!("Failed to run gcc: {}", e))?;
@@ -162,14 +181,24 @@ fn build(app: &AppHandle, code: &str, filename: &str) -> Result<BuildOutcome, St
 /// terminal hand-off afterward), so the frontend can just await this
 /// normally without needing the marker/event dance Run requires.
 #[command]
-pub fn build_only(app: AppHandle, code: String, filename: String) -> Result<(), String> {
-    build(&app, &code, &filename)?;
+pub fn build_only(
+    app: AppHandle,
+    code: String,
+    filename: String,
+    standard: Option<String>,
+) -> Result<(), String> {
+    build(&app, &code, &filename, standard)?;
     Ok(())
 }
 
 #[command]
-pub fn compile_and_run(app: AppHandle, code: String, filename: String) -> Result<(), String> {
-    let outcome = build(&app, &code, &filename)?;
+pub fn compile_and_run(
+    app: AppHandle,
+    code: String,
+    filename: String,
+    standard: Option<String>,
+) -> Result<(), String> {
+    let outcome = build(&app, &code, &filename, standard)?;
 
     if !outcome.success {
         let _ = app.emit(TERMINAL_OUTPUT_EVENT, format!("{}\r\n", RUN_DONE_MARKER));

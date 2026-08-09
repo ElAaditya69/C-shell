@@ -27,15 +27,41 @@ export function FileTreeNode({
   const [loading, setLoading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const getFileIcon = (name: string, isDir: boolean) => {
-    if (isDir) return "📁";
-    if (name.endsWith(".c")) return "⚡";
-    if (name.endsWith(".h")) return "📋";
-    if (name.endsWith(".json")) return "⚙️";
-    if (name.endsWith(".md")) return "📄";
-    if (name.endsWith(".py")) return "🐍";
-    if (name.endsWith(".js") || name.endsWith(".ts")) return "📜";
-    return "📄";
+  const getFileColor = (name: string, isDir: boolean) => {
+    if (isDir) return "#f0a500";
+    const ext = name.split(".").pop();
+    if (ext === "c") return "#5c9cf5";
+    if (ext === "h") return "#3dd68c";
+    if (name === "Makefile") return "#f05c5c";
+    return "#8b8fa8";
+  };
+
+  const renderIcon = (name: string, isDir: boolean) => {
+    const color = getFileColor(name, isDir);
+    if (isDir) {
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+          <path
+            d="M1 4h12v8H1V4zM1 4l2-2h4l1 2"
+            stroke={color}
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+            fill="rgba(240,165,0,0.08)"
+          />
+        </svg>
+      );
+    }
+    return (
+      <svg width="12" height="14" viewBox="0 0 12 14" fill="none" style={{ flexShrink: 0 }}>
+        <path
+          d="M1 1h7l3 3v9H1V1z"
+          stroke={color}
+          strokeWidth="1.1"
+          fill={color + "14"}
+        />
+        <path d="M8 1v3h3" stroke={color} strokeWidth="1.1" />
+      </svg>
+    );
   };
 
   const handleClick = async () => {
@@ -108,9 +134,18 @@ export function FileTreeNode({
           className={`tree-caret ${node.is_dir ? "" : "tree-caret-hidden"} ${
             expanded ? "expanded" : ""
           }`}
+          onClick={(e) => {
+            if (!node.is_dir) return;
+            // The caret sits inside a draggable row; a tiny mouse movement
+            // during click can start a drag and swallow the click event. Give
+            // the caret its own toggle handler so folders always collapse.
+            e.stopPropagation();
+            void handleClick();
+          }}
+          style={node.is_dir ? { cursor: "pointer" } : undefined}
         />
-        <span style={{ marginRight: "6px", fontSize: "12px" }}>
-          {getFileIcon(node.name, node.is_dir)}
+        <span style={{ display: "inline-flex", alignItems: "center", marginRight: "6px" }}>
+          {renderIcon(node.name, node.is_dir)}
         </span>
         <span className={`file-name ${node.is_dir ? "is-dir" : ""}`}>
           {node.name}

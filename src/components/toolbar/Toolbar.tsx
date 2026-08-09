@@ -8,6 +8,8 @@ export type ActivityState =
   | "building"
   | "formatting";
 
+const C_STANDARDS = ["C89", "C99", "C11", "C17", "GNU99"];
+
 interface ToolbarProps {
   onRun: () => void;
   onBuild: () => void;
@@ -19,8 +21,9 @@ interface ToolbarProps {
   onOpenFolder: () => void;
   onOpenFile: () => void;
   onOpenSettings: () => void;
+  onToggleTerminal: () => void;
   activityState: ActivityState;
-  currentFile: string | null;
+  onStandardChange?: (standard: string) => void;
 }
 
 export function Toolbar({
@@ -34,10 +37,12 @@ export function Toolbar({
   onOpenFolder,
   onOpenFile,
   onOpenSettings,
+  onToggleTerminal,
   activityState,
-  currentFile,
+  onStandardChange,
 }: ToolbarProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [standard, setStandard] = useState("C99");
   const { settings } = useSettings();
   const busy = activityState !== "idle";
 
@@ -53,7 +58,7 @@ export function Toolbar({
   const buildLabel =
     activityState === "building"
       ? showLabels ? "⏳ Building..." : "⏳"
-      : showLabels ? "🔨 Check Code" : "🔨";
+      : showLabels ? "✓ Check Code" : "✓";
 
   const toolsAction = (fn: () => void) => () => {
     fn();
@@ -63,27 +68,25 @@ export function Toolbar({
   return (
     <div className="toolbar">
       <div className="toolbar-left">
-        <div className="toolbar-group">
-          <button
-            className={`run-btn ${busy ? "running" : ""}`}
-            onClick={onRun}
-            disabled={busy}
-            title="Run Code (Ctrl/Cmd+Enter)"
-          >
-            {runLabel}
-          </button>
-
-          <button
-            className="tool-btn"
-            onClick={onBuild}
-            disabled={busy}
-            title="Compile and check for errors without running the program"
-          >
-            {buildLabel}
-          </button>
-        </div>
+        <button
+          className={`run-btn ${busy ? "running" : ""}`}
+          onClick={onRun}
+          disabled={busy}
+          title="Run Code (Ctrl/Cmd+Enter)"
+        >
+          <span>{runLabel}</span>
+        </button>
 
         <div className="toolbar-divider" />
+
+        <button
+          className="tool-btn"
+          onClick={onBuild}
+          disabled={busy}
+          title="Compile and check for errors without running the program"
+        >
+          {buildLabel}
+        </button>
 
         <div className="toolbar-group tools-dropdown-wrapper">
           <button
@@ -119,34 +122,58 @@ export function Toolbar({
 
         <div className="toolbar-divider" />
 
-        <div className="toolbar-group">
-          <button className="tool-btn subtle" onClick={onSave} title="Save File (Ctrl/Cmd+S)">
-            💾 {showLabels && "Save"}
-          </button>
-          <button className="tool-btn subtle" onClick={onNew} title="New File (Ctrl/Cmd+N)">
-            📝 {showLabels && "New"}
-          </button>
-          <button className="tool-btn subtle" onClick={onOpenFolder} title="Open Folder (Ctrl/Cmd+O)">
-            📁 {showLabels && "Folder"}
-          </button>
-          <button className="tool-btn subtle" onClick={onOpenFile} title="Open File">
-            📄 {showLabels && "File"}
-          </button>
-        </div>
+        <button className="tool-btn" onClick={onSave} title="Save File (Ctrl/Cmd+S)">
+          💾 {showLabels && "Save"}
+        </button>
+        <button className="tool-btn" onClick={onNew} title="New File (Ctrl/Cmd+N)">
+          + {showLabels && "New"}
+        </button>
+        <button className="tool-btn" onClick={onOpenFolder} title="Open Folder (Ctrl/Cmd+O)">
+          📁 {showLabels && "Folder"}
+        </button>
+        <button className="tool-btn" onClick={onOpenFile} title="Open File">
+          📄 {showLabels && "File"}
+        </button>
+
+        <div className="toolbar-divider" />
+
+        <button
+          className="tool-btn"
+          onClick={onToggleTerminal}
+          title="Toggle Terminal (Ctrl+`)"
+        >
+          🖥️ {showLabels && "Terminal"}
+        </button>
       </div>
 
       <div className="toolbar-right">
-        {currentFile && (
-          <span className="file-label">📄 {currentFile.split("/").pop()}</span>
-        )}
-        <span className="badge">C99</span>
+        <label className="standard-select" title="C Standard — the -std flag used when compiling (e.g. -std=c99)">
+          <span className="standard-select-label" aria-hidden="true">
+            C Standard
+          </span>
+          <select
+            value={standard}
+            onChange={(e) => {
+              const s = e.target.value;
+              setStandard(s);
+              onStandardChange?.(s);
+            }}
+            title="C Standard (controls the -std flag when compiling)"
+            aria-label="C Standard"
+          >
+            {C_STANDARDS.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <span aria-hidden="true">▾</span>
+        </label>
+
         <button
-          className="icon-action-btn"
+          className="icon-action-btn settings-icon"
           onClick={onOpenSettings}
           title="Preferences (Ctrl/Cmd+,)"
-          style={{ fontSize: "14px", marginLeft: "4px" }}
         >
-          ⚙️
+          ⚙
         </button>
       </div>
     </div>
