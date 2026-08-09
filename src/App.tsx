@@ -489,7 +489,7 @@ function App() {
         <span className="logo">
           <Logo size={20} /> C-SHELL
         </span>
-        <span className="subtitle">v0.6.0-beta.1 — Professional Edition</span>
+        <span className="subtitle">v0.6.0-beta1 — Professional Edition</span>
       </div>
 
       {hasCrashBackup && (
