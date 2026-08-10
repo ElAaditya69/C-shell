@@ -26,6 +26,10 @@ export interface AppSettings {
   terminalPosition: 'bottom' | 'right';
   userCss: string;
   customThemes: CustomTheme[];
+  backupEnabled: boolean;
+  backupInterval: number;
+  backupCount: number;
+  backupDir: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -52,6 +56,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   terminalPosition: "bottom",
   userCss: "",
   customThemes: [],
+  backupEnabled: true,
+  backupInterval: 30,
+  backupCount: 5,
+  backupDir: "~/.cshell/backups/",
 };
 
 interface SettingsContextType {
