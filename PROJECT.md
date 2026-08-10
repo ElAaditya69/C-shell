@@ -4,7 +4,7 @@
 Build the ultimate lightweight, high-performance, cross-platform C IDE designed for students, educators, and C developers.
 
 ## Current Version
-**v0.4.0 (Pre-Sprint-4 Complete — Full Feature IDE)**
+**v0.6.0-beta (Release — Full Feature IDE)**
 
 ---
 

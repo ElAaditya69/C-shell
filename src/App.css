@@ -16,6 +16,8 @@
   --accent: #f0a500;
   --border: #1a1c24;
   --border-strong: #2a2c36;
+  --radius-sm: 3px;
+  --radius-md: 6px;
   --success: #3dd68c;
   --error: #f05c5c;
   --blue: #5c9cf5;
@@ -189,10 +191,15 @@ body {
   opacity: 1;
   transition: all 0.15s ease;
   line-height: 1;
+  /* Explicit color with guaranteed contrast against --bg-secondary in every
+     theme (retro/midnight/solarized/light) — the parent header text is too
+     dim to inherit from. */
+  color: var(--text-secondary);
 }
 
 .icon-action-btn:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* A text label keeps this important control discoverable in every theme. */
@@ -280,7 +287,7 @@ body {
 .file-item {
   padding: 4px 8px;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   transition: all 0.12s;
   color: var(--text-dim);
@@ -361,7 +368,7 @@ body {
   color: #0c0d10;
   border: none;
   padding: 5px 14px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -393,7 +400,7 @@ body {
   color: var(--text-dim);
   border: 1px solid transparent;
   padding: 5px 9px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   font-size: 11px;
   font-weight: 400;
@@ -411,6 +418,13 @@ body {
   color: var(--text-primary);
 }
 
+.tool-btn:active {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-bright, #f0a500);
+  transform: translateY(0);
+}
+
 .tool-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -426,6 +440,18 @@ body {
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+.standard-select-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 .standard-select select {
@@ -434,16 +460,23 @@ body {
   background: var(--bg-hover);
   color: var(--text-bright, #f0a500);
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 4px 24px 4px 8px;
   font-size: 11px;
   font-family: inherit;
   font-weight: 600;
   letter-spacing: 0.06em;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.standard-select span {
+.standard-select select:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+/* Chevron only — sits inside the dropdown, must never touch the label. */
+.standard-select select ~ span {
   position: absolute;
   right: 6px;
   color: var(--text-dim);
@@ -453,7 +486,7 @@ body {
 
 .settings-icon {
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-dim);
   padding: 3px 7px;
   font-size: 13px;
@@ -720,7 +753,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -1432,7 +1465,7 @@ body {
   gap: 9px;
   padding: 7px 10px;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.1s, border-color 0.1s;
 }
@@ -1466,9 +1499,12 @@ body {
   color: var(--text-primary);
 }
 
+/* The path is supporting detail: clearly dimmer than the name above it. */
 .welcome-recent-path {
   font-size: 10px;
+  font-weight: 400;
   color: var(--text-dim);
+  opacity: 0.85;
   margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
@@ -1518,7 +1554,7 @@ body {
 .shortcut-kbd {
   background: var(--bg-hover);
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 1px 7px;
   font-size: 10px;
   color: var(--text-bright, #f0a500);
@@ -1620,10 +1656,12 @@ body {
   padding: 4px;
   border-radius: 4px;
   transition: background 0.15s ease;
+  color: var(--text-secondary);
 }
 
 .icon-action-btn:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* ===== DIAGNOSTICS PANEL ===== */
@@ -1720,7 +1758,7 @@ body {
   gap: 10px;
   padding: 9px 12px;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   width: 100%;

@@ -22,6 +22,8 @@ Choose from 4 built-in themes:
 | **Solarized** | Classic Solarized Dark palette |
 | **Light** | Clean white theme for bright environments |
 
+Custom themes created in the **Themes** tab can be renamed inline — click **✏️ Rename**, type a new name, and press **Enter** (or **✓ Save**); press **Escape** to cancel. Renames persist to `settings.json`.
+
 ### Editor Font Size
 Slider from **10px** to **24px**. Default: **14px**.
 

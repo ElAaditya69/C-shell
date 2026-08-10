@@ -335,6 +335,8 @@ function ModalFooter({ onClose }: { onClose: () => void }) {
 function ThemesTab() {
   const { settings, updateSettings } = useSettings();
   const customThemes = settings.customThemes || [];
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
 
   const saveCustomTheme = (theme: {
     id: string;
@@ -474,20 +476,62 @@ function ThemesTab() {
               marginBottom: 12,
             }}
           >
-            <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-              Editing: <b style={{ color: "var(--text-primary)" }}>{activeCustom.name}</b>
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              {editingName === activeCustom.id ? (
+                <>
+                  <input
+                    autoFocus
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const name = draftName.trim();
+                        if (name) saveCustomTheme({ ...activeCustom, name });
+                        setEditingName(null);
+                      } else if (e.key === "Escape") {
+                        setEditingName(null);
+                      }
+                    }}
+                    style={{
+                      width: 180,
+                      padding: "4px 8px",
+                      fontSize: 12,
+                      background: "var(--bg-primary)",
+                      border: "1px solid var(--accent)",
+                      borderRadius: 4,
+                      color: "var(--text-primary)",
+                      fontFamily: "inherit",
+                      outline: "none",
+                    }}
+                  />
+                  <GhostBtn
+                    label="✓ Save"
+                    small
+                    onClick={() => {
+                      const name = draftName.trim();
+                      if (name) saveCustomTheme({ ...activeCustom, name });
+                      setEditingName(null);
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    Editing:{" "}
+                    <b style={{ color: "var(--text-primary)" }}>{activeCustom.name}</b>
+                  </span>
+                  <GhostBtn
+                    label="✏️ Rename"
+                    small
+                    onClick={() => {
+                      setDraftName(activeCustom.name);
+                      setEditingName(activeCustom.id);
+                    }}
+                  />
+                </>
+              )}
+            </div>
             <div style={{ display: "flex", gap: 6 }}>
-              <GhostBtn
-                label="✏️ Rename"
-                small
-                onClick={() => {
-                  const name = prompt("Theme name:", activeCustom.name);
-                  if (name && name.trim()) {
-                    saveCustomTheme({ ...activeCustom, name: name.trim() });
-                  }
-                }}
-              />
               <GhostBtn
                 label="🗑️ Delete"
                 small

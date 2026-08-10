@@ -125,7 +125,14 @@ export function FileTree({
   }
 
   return (
-    <div className="file-tree" style={{ width }}>
+    <div
+      className="file-tree"
+      style={{
+        width,
+        // Explorer Position setting: render the sidebar on the chosen side.
+        ...(settings.explorerPosition === "right" ? { borderRight: "none", borderLeft: "1px solid var(--border)", order: 3 } : {}),
+      }}
+    >
       <div className="file-tree-header">
         <span className="explorer-title">EXPLORER</span>
         <div className="file-tree-header-actions">
@@ -228,7 +235,15 @@ export function FileTree({
         <span className="collapse-sidebar-btn-label">Collapse</span>
       </button>
 
-      <div className="file-tree-drag-handle" onMouseDown={startDrag} />
+      <div
+        className="file-tree-drag-handle"
+        onMouseDown={startDrag}
+        style={
+          settings.explorerPosition === "right"
+            ? { right: "auto", left: -3 }
+            : undefined
+        }
+      />
 
       {menu && (
         <ContextMenu
