@@ -83,6 +83,19 @@ struct BuildOutcome {
     binary_name: &'static str,
 }
 
+/// Builds the gcc invocation. -std is passed as a single "-std=…" argument.
+fn gcc_command(file_path: &Path, binary_path: &Path, std_flag: &str) -> Command {
+    let mut cmd = Command::new("gcc");
+    cmd.arg(file_path)
+        .arg("-o")
+        .arg(binary_path)
+        // Must be a single argument: gcc/clang reject "-std" and "c99"
+        // passed separately (the flag value would be parsed as a file).
+        .arg(format!("-std={}", std_flag))
+        .arg("-Wall");
+    cmd
+}
+
 /// Whitelist of accepted C standards; gcc maps "GNU99" to "gnu99".
 fn standard_flag(standard: &str) -> String {
     match standard.trim().to_ascii_lowercase() {
@@ -134,14 +147,7 @@ fn build(
     ));
 
     let start = Instant::now();
-    let compile_output = Command::new("gcc")
-        .arg(&file_path)
-        .arg("-o")
-        .arg(&binary_path)
-        // Must be a single argument: gcc/clang reject "-std" and "c99"
-        // passed separately (the flag value would be parsed as a file).
-        .arg(format!("-std={}", std_flag))
-        .arg("-Wall")
+    let compile_output = gcc_command(&file_path, &binary_path, &std_flag)
         .output()
         .map_err(|e| format!("Failed to run gcc: {}", e))?;
     let elapsed = start.elapsed();
@@ -248,4 +254,30 @@ pub fn clean_build(app: AppHandle) -> Result<(), String> {
         "\x1b[32m🧹 Build artifacts cleaned successfully.\x1b[0m\r\n".to_string(),
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gcc_std_flag_is_single_argument_and_compiles_all_standards() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("argv_test.c");
+        fs::write(&src, "int main(void) { return 0; }\n").unwrap();
+
+        for label in ["c89", "c99", "c11", "c17", "gnu99"] {
+            let std_flag = standard_flag(label);
+            let bin = dir.join(format!("argv_{}", label));
+            let mut cmd = gcc_command(&src, &bin, &std_flag);
+            let out = cmd.output().expect("gcc runs");
+            assert!(
+                out.status.success(),
+                "compile failed for {}: {}",
+                label,
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+    }
 }
