@@ -79,18 +79,40 @@ jobs:
             src-tauri/target/**/release/bundle/**/*.rpm
           if-no-files-found: error
 
+  # Resolve the release tag from the app version (tauri.conf.json) instead of
+  # requiring a freshly pushed `v*` tag. This lets a beta be re-published under
+  # the SAME version/tag (e.g. after fixing the bundles) without bumping.
+  release-info:
+    name: Resolve release tag
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.info.outputs.tag }}
+      tag_exists: ${{ steps.info.outputs.tag_exists }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute version and check for existing tag
+        id: info
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          TAG="v${VERSION}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
   publish-release:
     name: Publish GitHub release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, release-info]
+    if: github.event_name != 'pull_request' && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       # gh release create needs a git repo for context.
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
       - name: Download installers
         uses: actions/download-artifact@v4
         with:
@@ -100,7 +122,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release-info.outputs.tag }}
+          TAG_EXISTS: ${{ needs.release-info.outputs.tag_exists }}
         run: |
+          set -euo pipefail
+
+          # Re-releasing under the same version: force-move the existing
+          # pre-release tag onto this build's commit so the release points at
+          # the current code, then --force replaces the old release.
+          if [[ "${TAG_EXISTS}" == "true" ]]; then
+            echo "Reusing existing tag ${TAG}; force-moving it to this commit"
+            git tag -f "${TAG}"
+            git push origin "refs/tags/${TAG}" --force
+          else
+            echo "Creating new tag ${TAG}"
+            git tag "${TAG}"
+            git push origin "refs/tags/${TAG}"
+          fi
+
           # Only `gh release create` on the actual installer files. The
           # artifact unpacking can leave stray directories (e.g. a `release/`
           # folder), which gh refuses to upload.
@@ -109,4 +148,12 @@ jobs:
             echo "::error::No installer files found to publish"
             exit 1
           fi
-          gh release create "$GITHUB_REF_NAME" "${files[@]}" --title "C-Shell $GITHUB_REF_NAME" --prerelease --generate-notes
+
+          # --force replaces an existing release at this tag (deletes it and
+          # recreates with the fresh artifacts + regenerated notes), so a beta
+          # can be re-released in place rather than skipped.
+          gh release create "${TAG}" "${files[@]}" \
+            --title "C-Shell ${TAG}" \
+            --prerelease \
+            --generate-notes \
+            --force

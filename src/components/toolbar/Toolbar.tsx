@@ -22,6 +22,8 @@ interface ToolbarProps {
   onOpenFile: () => void;
   onOpenSettings: () => void;
   onToggleTerminal: () => void;
+  onToggleSplitView?: () => void;
+  isSplitView?: boolean;
   activityState: ActivityState;
   onStandardChange?: (standard: string) => void;
 }
@@ -38,6 +40,8 @@ export function Toolbar({
   onOpenFile,
   onOpenSettings,
   onToggleTerminal,
+  onToggleSplitView,
+  isSplitView,
   activityState,
   onStandardChange,
 }: ToolbarProps) {
@@ -143,6 +147,14 @@ export function Toolbar({
           title="Toggle Terminal (Ctrl+`)"
         >
           🖥️ {showLabels && "Terminal"}
+        </button>
+        <button
+          className={`tool-btn ${isSplitView ? "split-active" : ""}`}
+          onClick={onToggleSplitView}
+          title={isSplitView ? "Exit Split Editor" : "Split Editor"}
+          style={isSplitView ? { boxShadow: "inset 0 0 0 1px var(--accent)", color: "var(--accent)" } : undefined}
+        >
+          ▭ {showLabels && (isSplitView ? "Split On" : "Split")}
         </button>
       </div>
 

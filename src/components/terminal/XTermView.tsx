@@ -114,7 +114,7 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
 
     const term = new XTerm({
       cursorBlink: true,
-      fontFamily: settings.terminalFontFamily || "JetBrains Mono, monospace",
+      fontFamily: settings.terminalFontFamily || "JetBrains Mono",
       fontSize: settings.terminalFontSize || 14,
       convertEol: true,
       scrollback: 5000,

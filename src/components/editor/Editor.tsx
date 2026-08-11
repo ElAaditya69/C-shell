@@ -195,6 +195,14 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
           '&': {
             color: 'var(--text-primary)',
             backgroundColor: 'var(--bg-primary)',
+            fontSize: `${settings.editorFontSize}px`,
+            // CodeMirror's default base-theme sets `.cm-scroller { font-family:
+            // monospace }`, whose specificity beats any font set on the wrapper.
+            // Declare it on .cm-scroller itself so the setting actually reaches
+            // the rendered glyphs.
+            '& .cm-scroller': {
+              fontFamily: settings.fontFamily || 'inherit',
+            },
           },
           '.cm-content': { caretColor: 'var(--text-primary)' },
           '&.cm-focused .cm-cursor': { borderLeftColor: 'var(--accent)' },
@@ -219,7 +227,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         },
         { dark: true }
       ),
-    []
+    [settings.editorFontSize, settings.fontFamily]
   );
 
   /* Amber-tinted retro syntax palette driven by the same CSS variables. */
@@ -253,6 +261,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       style={{
         fontSize: `${settings.editorFontSize}px`,
         fontFamily: settings.fontFamily || 'inherit',
+        letterSpacing: 'normal',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',

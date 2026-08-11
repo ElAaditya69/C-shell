@@ -18,11 +18,13 @@ const NAV_TABS: { id: Tab; icon: string; label: string }[] = [
 ];
 
 const FONT_FAMILIES = [
-  "Fira Code, JetBrains Mono, Menlo, Consolas, monospace",
-  "JetBrains Mono, Menlo, Consolas, monospace",
-  "Menlo, Monaco, 'Courier New', monospace",
-  "'Courier New', Courier, monospace",
-  "Consolas, 'Liberation Mono', monospace",
+  "JetBrains Mono",
+  "Fira Code",
+  "Menlo",
+  "Monaco",
+  "Consolas",
+  "'Courier New'",
+  "monospace",
 ];
 
 /* Theme-aware palette derived from the app's live CSS custom properties, so the

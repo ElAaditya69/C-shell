@@ -430,6 +430,13 @@ function App() {
         terminalRef.current?.toggle();
         return;
       }
+      /* Help / Shortcuts: Ctrl+Shift+H — opens the same shortcuts list the
+         status-bar "?" opens (the command palette doubles as the help panel). */
+      if (mod && e.shiftKey && key === 'h') {
+        e.preventDefault();
+        setCommandPaletteVisible(true);
+        return;
+      }
     };
     // Capture before CodeMirror receives the event: Run must never insert a
     // newline, and comment/symbol shortcuts must have one owner only.
@@ -473,6 +480,7 @@ function App() {
     { id: 'presentation-mode', label: '🎬 Presentation Mode', category: 'View', perform: togglePresentationMode },
     { id: 'split-editor', label: '🪟 Toggle Split Editor', category: 'View', perform: toggleSplitView },
     { id: 'snippets', label: '✂️ Insert Snippet', category: 'Edit', perform: () => setSnippetsModalVisible(true) },
+    { id: 'help-shortcuts', label: '❓ Keyboard Shortcuts & Help', category: 'General', shortcut: 'Ctrl+Shift+H', perform: () => setCommandPaletteVisible(true) },
   ];
 
   const appClassName = [
@@ -484,7 +492,63 @@ function App() {
     .join(' ');
 
   return (
-    <div className={appClassName}>
+    <>
+      {(zenMode || presentationMode) && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '12px',
+            right: '16px',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'var(--bg-panel)',
+            border: '1px solid var(--border)',
+            borderRadius: '20px',
+            padding: '4px 12px',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <span>
+            {zenMode ? '🧘 Zen Mode' : '🎬 Presentation Mode'}
+            <span style={{ opacity: 0.6, marginLeft: '6px' }}>(Esc)</span>
+          </span>
+          <button
+            onClick={() => {
+              setZenMode(false);
+              setPresentationMode(false);
+            }}
+            title="Exit to normal view (Esc)"
+            style={{
+              background: 'var(--accent)',
+              color: '#0d0e11',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '2px 8px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'filter 0.12s, transform 0.1s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.filter = 'brightness(1.15)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.filter = 'none';
+              e.currentTarget.style.transform = 'none';
+            }}
+          >
+            Exit
+          </button>
+        </div>
+      )}
+
+      <div className={appClassName}>
       <div className="titlebar">
         <span className="logo">
           <Logo size={20} /> C-SHELL
@@ -559,6 +623,8 @@ function App() {
               onOpenFile={handleOpenFile}
               onOpenSettings={() => setSettingsModalVisible(true)}
               onToggleTerminal={() => terminalRef.current?.toggle()}
+              onToggleSplitView={toggleSplitView}
+              isSplitView={splitView}
               activityState={activityState}
               onStandardChange={(s) => setCStandard(s.toLowerCase())}
             />
@@ -653,7 +719,7 @@ function App() {
             <span className="status-sep">|</span>
             <span
               className="status-item status-help"
-              title="Keyboard shortcuts &amp; help"
+              title="Keyboard shortcuts &amp; help (Ctrl+Shift+H)"
               onClick={() => setCommandPaletteVisible(true)}
             >
               ?
@@ -712,7 +778,8 @@ function App() {
           onClose={() => setSnippetsModalVisible(false)}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

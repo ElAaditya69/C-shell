@@ -38,9 +38,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   terminalHeight: 200,
   showToolbarLabels: true,
   editorFontSize: 14,
-  fontFamily: "Fira Code, JetBrains Mono, Menlo, Consolas, monospace",
+  fontFamily: "JetBrains Mono",
   terminalFontSize: 14,
-  terminalFontFamily: "JetBrains Mono, Menlo, Consolas, monospace",
+  terminalFontFamily: "JetBrains Mono",
   useTabsIndent: false,
   tabSize: 4,
   wordWrap: true,
@@ -110,6 +110,19 @@ export function applyThemeVariables(
 
 const USER_CSS_ID = "c-shell-user-css";
 
+/** Legacy builds stacked fonts into one comma list (e.g. "Fira Code, JetBrains
+    Mono, …"). The font dropdown now offers each family on its own, so migrate a
+    saved value down to its first named face. Unknown/custom strings are kept
+    as-is so a power-user's direct CSS font value still applies. */
+export function normalizeFontFamily(value: string | undefined): string {
+  if (!value) return "JetBrains Mono";
+  const first = value.split(",")[0]?.trim().replace(/^['"]|['"]$/g, "");
+  if (first && first.toLowerCase() !== "sans-serif" && first !== "monospace") {
+    return first;
+  }
+  return value;
+}
+
 /** Injects or removes the user's custom CSS via a <style> element. */
 export function applyUserCss(userCss: string | undefined) {
   let style = document.getElementById(USER_CSS_ID) as HTMLStyleElement | null;
@@ -150,6 +163,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           const merged = {
             ...DEFAULT_SETTINGS,
             ...parsed,
+            fontFamily: normalizeFontFamily(parsed.fontFamily),
+            terminalFontFamily: normalizeFontFamily(parsed.terminalFontFamily),
             customThemes: Array.isArray(parsed.customThemes)
               ? parsed.customThemes
               : [],
