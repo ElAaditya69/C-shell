@@ -96,7 +96,9 @@ jobs:
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
           TAG="v${VERSION}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          # Release under a distinct beta tag to avoid reusing the plain
+              # version tag (which previously caused installers not to publish).
+              echo "tag=${TAG}-beta" >> "$GITHUB_OUTPUT"
           if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           else
@@ -118,8 +120,6 @@ jobs:
         with:
           path: release-assets
           merge-multiple: true
-      - name: List downloaded files (debug)
-        run: find release-assets -type f | sort
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
