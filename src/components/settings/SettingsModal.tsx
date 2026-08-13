@@ -18,6 +18,7 @@ const NAV_TABS: { id: Tab; icon: string; label: string }[] = [
 ];
 
 const FONT_FAMILIES = [
+  "JetBrainsMono Nerd Font",
   "JetBrains Mono",
   "Fira Code",
   "Menlo",
