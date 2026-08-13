@@ -131,7 +131,7 @@ jobs:
 
           # Re-releasing under the same version: force-move the existing
           # pre-release tag onto this build's commit so the release points at
-          # the current code, then --force replaces the old release.
+          # the current code.
           if [[ "${TAG_EXISTS}" == "true" ]]; then
             echo "Reusing existing tag ${TAG}; force-moving it to this commit"
             git tag -f "${TAG}"
@@ -151,11 +151,12 @@ jobs:
             exit 1
           fi
 
-          # --force replaces an existing release at this tag (deletes it and
-          # recreates with the fresh artifacts + regenerated notes), so a beta
-          # can be re-released in place rather than skipped.
+          # Delete any existing release at this tag first (portable fallback
+          # since not all gh versions support --force).
+          gh release delete "${TAG}" --yes --cleanup-tag=false 2>/dev/null || true
+
           gh release create "${TAG}" "${files[@]}" \
             --title "C-Shell ${TAG}" \
             --prerelease \
-            --generate-notes \
-            --force
+            --generate-notes
+
