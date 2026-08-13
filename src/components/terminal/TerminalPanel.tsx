@@ -1,8 +1,9 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { XTermView, XTermHandle } from "./XTermView";
+import { XTermView, XTermHandle, RUN_FINISHED_EVENT } from "./XTermView";
 import { DiagnosticsPanel, Diagnostic } from "./DiagnosticsPanel";
 import { useSettings } from "../../context/SettingsContext";
 import { listen } from "@tauri-apps/api/event";
+import { FileService } from "../../services/FileService";
 
 type Mode = "normal" | "minimized" | "maximized";
 type PanelTab = "terminal" | "problems";
@@ -13,11 +14,10 @@ const MINIMIZED_HEIGHT = 80;
 export interface TerminalPanelHandle {
   getTerminalBuffer: () => string;
   clear: () => void;
-  /** Make the terminal visible (mounted) so it can be used / output shown. */
   show: () => void;
-  /** Toggle between collapsed (32px) and expanded. */
   toggle: () => void;
   isVisible: () => boolean;
+  sendInterrupt: () => void;
 }
 
 interface TerminalPanelProps {
@@ -27,10 +27,6 @@ interface TerminalPanelProps {
 export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>(function TerminalPanel({ onSelectDiagnostic }, ref) {
   const { settings, updateSettings } = useSettings();
   const [height, setHeight] = useState(settings.terminalHeight || 200);
-  // Starts collapsed so no shell is spawned until the user actually runs
-  // something or opens the terminal (VS Code-like lazy startup).
-  // `visible` controls whether the whole panel is shown at all (true hide,
-  // not just a collapsed bar). `mode` controls the expanded/collapsed state.
   const [visible, setVisible] = useState(false);
   const [mode, setMode] = useState<Mode>("normal");
   const [started, setStarted] = useState(false);
@@ -51,6 +47,13 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
     setMode("normal");
   }, []);
 
+  const sendInterrupt = useCallback(() => {
+    FileService.sendCommand("\x03").catch((err) =>
+      console.error("Failed to send interrupt:", err)
+    );
+    window.dispatchEvent(new CustomEvent(RUN_FINISHED_EVENT));
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -58,8 +61,6 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
       clear: () => xtermRef.current?.clear(),
       show: showTerminal,
       toggle: () => {
-        // Opening the terminal (even for the first time) starts the shell
-        // immediately so it's usable for manual commands without running code.
         if (!startedRef.current) {
           showTerminal();
           return;
@@ -67,8 +68,9 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
         setVisible((v) => !v);
       },
       isVisible: () => visibleRef.current,
+      sendInterrupt,
     }),
-    [showTerminal]
+    [showTerminal, sendInterrupt]
   );
 
   useEffect(() => {
@@ -78,7 +80,6 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
         setDiagnostics(e.payload || []);
         if (e.payload && e.payload.length > 0) {
           setActiveTab("problems");
-          // Surface diagnostics even if the terminal has never been opened.
           showTerminal();
         }
       });
@@ -125,20 +126,16 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
     if (mode !== "normal") setMode("normal");
   };
 
-  const panelHeight =
-    mode === "minimized"
+  const panelHeight = visible
+    ? mode === "minimized"
       ? MINIMIZED_HEIGHT
       : mode === "maximized"
       ? Math.round(window.innerHeight * 0.7)
-      : height;
-
-  // Hidden until the user toggles the terminal open (toolbar button, Ctrl+`,
-  // or Run). Once opened the shell starts immediately so it's usable for
-  // manual commands — not just for running the current file.
-  if (!visible) return null;
+      : height
+    : 0;
 
   return (
-    <div className="terminal-panel" style={{ height: panelHeight }}>
+    <div className="terminal-panel" style={{ height: panelHeight, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       {mode === "normal" && (
         <div className="terminal-drag-handle" onMouseDown={startDrag} />
       )}
@@ -195,7 +192,7 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
               title="Stop running program (Ctrl+C)"
               onClick={(e) => {
                 e.stopPropagation();
-                xtermRef.current?.sendInterrupt();
+                sendInterrupt();
               }}
             >
               ⏹ Stop
@@ -231,37 +228,30 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
         </div>
       </div>
 
-      <div
-        className="terminal-body-wrapper"
-        style={{
-          display: mode === "minimized" ? "none" : "block",
-        }}
-      >
-        {activeTab === "terminal" ? (
-          // The PTY shell only spawns once the terminal is first shown.
-          started ? (
-            <XTermView ref={xtermRef} />
-          ) : (
+      <div className="terminal-body-wrapper" style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: activeTab === 'terminal' ? 'block' : 'none' }}>
+          {started ? <XTermView ref={xtermRef} started={started} /> : (
             <div
               style={{
-                flex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--text-dim)",
-                fontSize: "13px",
-                minHeight: MIN_HEIGHT,
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-dim)',
+                fontSize: '13px'
               }}
             >
               ▶ Run a program to start the terminal
             </div>
-          )
-        ) : (
-          <DiagnosticsPanel
-            diagnostics={diagnostics}
-            onSelectDiagnostic={(diag) => onSelectDiagnostic?.(diag)}
-          />
-        )}
+          )}
+        </div>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: activeTab === 'problems' ? 'block' : 'none' }}>
+          <DiagnosticsPanel diagnostics={diagnostics} onSelectDiagnostic={onSelectDiagnostic ?? (() => {})} />
+        </div>
       </div>
     </div>
   );

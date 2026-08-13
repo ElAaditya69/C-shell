@@ -14,13 +14,19 @@ export interface XTermHandle {
   getBufferText: () => string;
 }
 
+export interface XTermProps {
+  started?: boolean;
+}
+
 const RUN_DONE_MARKER = "__CSHELL_RUN_DONE__";
 export const RUN_FINISHED_EVENT = "cshell:run-finished";
 
-export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
+export const XTermView = forwardRef<XTermHandle, XTermProps>(function XTermView({ started = false }, ref) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
   const { settings } = useSettings();
+  const hasStartedRef = useRef(false);
 
   useImperativeHandle(ref, () => ({
     clear: () => xtermRef.current?.clear(),
@@ -45,66 +51,7 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
     },
   }));
 
-  useEffect(() => {
-    if (xtermRef.current) {
-      xtermRef.current.options.fontSize = settings.terminalFontSize || 14;
-      if (settings.terminalFontFamily) {
-        xtermRef.current.options.fontFamily = settings.terminalFontFamily;
-      }
-    }
-  }, [settings.terminalFontSize, settings.terminalFontFamily]);
-
-  /* Theme changes re-style the app through CSS variables on <html>. xterm
-     reads them once at mount, so watch for variable changes and push the full
-     palette into the live terminal (xterm v5 re-themes in place). */
-  useEffect(() => {
-    const term = xtermRef.current;
-    if (!term) return;
-
-    const applyColors = () => {
-      const t = xtermRef.current;
-      if (!t) return;
-      const s = getComputedStyle(document.documentElement);
-      const r = (name: string, fallback: string) =>
-        s.getPropertyValue(name).trim() || fallback;
-      t.options.theme = {
-        background: r("--bg-primary", "#0b0b12"),
-        foreground: r("--text-primary", "#e8eaf0"),
-        cursor: r("--text-primary", "#e8eaf0"),
-        cursorAccent: r("--bg-primary", "#0b0b12"),
-        selectionBackground: r("--accent", "#ffb000"),
-        selectionForeground: r("--bg-primary", "#0b0b12"),
-        black: r("--bg-deep", "#000000"),
-        red: r("--error", "#f05c5c"),
-        green: r("--success", "#3dd68c"),
-        yellow: r("--text-bright", "#f0a500"),
-        blue: r("--blue", "#5c9cf5"),
-        magenta: r("--text-bright", "#f0a500"),
-        cyan: r("--blue", "#5c9cf5"),
-        white: r("--text-secondary", "#c4c8de"),
-        brightBlack: r("--text-dim", "#8b8fa8"),
-        brightRed: r("--error", "#f05c5c"),
-        brightGreen: r("--success", "#3dd68c"),
-        brightYellow: r("--text-bright", "#f0a500"),
-        brightBlue: r("--blue", "#5c9cf5"),
-        brightMagenta: r("--text-bright", "#f0a500"),
-        brightCyan: r("--blue", "#5c9cf5"),
-        brightWhite: r("--text-primary", "#e8eaf0"),
-      };
-    };
-
-    applyColors();
-
-    // applyThemeVariables writes to documentElement.style, so watching the
-    // style attribute covers every theme switch (preset, custom, user CSS).
-    const observer = new MutationObserver(() => applyColors());
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["style"],
-    });
-    return () => observer.disconnect();
-  }, [settings.theme]);
-
+  // Effect 1: Create terminal instance ONCE on mount
   useEffect(() => {
     if (!terminalRef.current || xtermRef.current) return;
 
@@ -112,9 +59,12 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
     const bg = style.getPropertyValue("--bg-primary").trim() || "#0b0b12";
     const fg = style.getPropertyValue("--text-primary").trim() || "#ffb000";
 
+    const family = settings.terminalFontFamily || "JetBrainsMono Nerd Font";
+    const fontStack = `"${family}", "JetBrainsMono Nerd Font", "JetBrains Mono", Menlo, Monaco, Consolas, "Courier New", monospace`;
+
     const term = new XTerm({
       cursorBlink: true,
-      fontFamily: settings.terminalFontFamily || "JetBrains Mono",
+      fontFamily: fontStack,
       fontSize: settings.terminalFontSize || 14,
       convertEol: true,
       scrollback: 5000,
@@ -139,6 +89,7 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
     });
 
     const fitAddon = new FitAddon();
+    fitAddonRef.current = fitAddon;
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
     fitAddon.fit();
@@ -151,10 +102,28 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
 
     let unlistenOutput: (() => void) | undefined;
     let unlistenFocus: (() => void) | undefined;
-    let disposed = false;
-    let hasStarted = false;
+    let rafId: number | null = null;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width === 0 || height === 0) return;
+
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        fitAddon.fit();
+        if (hasStartedRef.current) {
+          FileService.resizeTerminal(term.rows, term.cols).catch((err) =>
+            console.error("Failed to resize pty:", err)
+          );
+        }
+      });
+    });
+    resizeObserver.observe(terminalRef.current);
 
     (async () => {
+      // Handle incoming data from the pty (only if pty has started)
       unlistenOutput = await listen<string>("terminal-output", (event) => {
         const payload = event.payload;
 
@@ -170,69 +139,76 @@ export const XTermView = forwardRef<XTermHandle>(function XTermView(_, ref) {
 
         term.write(payload);
       });
+
+      // Handle terminal focus events
       unlistenFocus = await listen("terminal-focus", () => {
         term.focus();
       });
+    })();
 
-      if (disposed) return;
+    // Handle keypresses from the terminal (send to pty only if pty has started)
+    term.onData((data) => {
+      if (data === "\x03") {
+        window.dispatchEvent(new CustomEvent(RUN_FINISHED_EVENT));
+      }
+      // Only send data to pty if it has started
+      if (hasStartedRef.current) {
+        FileService.sendCommand(data).catch((err) =>
+          console.error("Failed to send input:", err)
+        );
+      }
+    });
 
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
+      unlistenOutput?.();
+      unlistenFocus?.();
+      term.dispose();
+      xtermRef.current = null;
+    };
+  }, []);
+
+  // Effect 2: Dynamically update terminal font, size, and theme without disposing the terminal!
+  useEffect(() => {
+    const term = xtermRef.current;
+    if (!term) return;
+
+    const family = settings.terminalFontFamily || "JetBrainsMono Nerd Font";
+    const fontStack = `"${family}", "JetBrainsMono Nerd Font", "JetBrains Mono", Menlo, Monaco, Consolas, "Courier New", monospace`;
+    term.options.fontFamily = fontStack;
+    term.options.fontSize = settings.terminalFontSize || 14;
+
+    const style = getComputedStyle(document.documentElement);
+    const bg = style.getPropertyValue("--bg-primary").trim() || "#0b0b12";
+    const fg = style.getPropertyValue("--text-primary").trim() || "#ffb000";
+    term.options.theme = {
+      background: bg,
+      foreground: fg,
+      cursor: fg,
+    };
+
+    fitAddonRef.current?.fit();
+  }, [settings.terminalFontFamily, settings.terminalFontSize, settings.theme]);
+
+  // Effect 3: Start the pty when the terminal is started
+  useEffect(() => {
+    if (!started || !xtermRef.current || hasStartedRef.current) return;
+
+    const term = xtermRef.current;
+    (async () => {
       try {
         await FileService.startTerminal();
-        hasStarted = true;
+        hasStartedRef.current = true;
         await FileService.resizeTerminal(term.rows, term.cols);
       } catch (err) {
         if (!String(err).includes("already started")) {
           console.error("Failed to start terminal:", err);
           term.writeln(`\r\n[c-shell] Failed to start terminal: ${err}\r\n`);
         } else {
-          hasStarted = true;
+          hasStartedRef.current = true;
         }
       }
     })();
-
-    term.onData((data) => {
-
-      if (data === "\x03") {
-        window.dispatchEvent(new CustomEvent(RUN_FINISHED_EVENT));
-      }
-      FileService.sendCommand(data).catch((err) =>
-        console.error("Failed to send input:", err)
-      );
-    });
-
-    let rafId: number | null = null;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const { width, height } = entry.contentRect;
-      if (width === 0 || height === 0) return;
-
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        fitAddon.fit();
-        if (hasStarted) {
-          FileService.resizeTerminal(term.rows, term.cols).catch((err) =>
-            console.error("Failed to resize pty:", err)
-          );
-        }
-      });
-    });
-    resizeObserver.observe(terminalRef.current);
-
-    return () => {
-      disposed = true;
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      resizeObserver.disconnect();
-      unlistenOutput?.();
-      unlistenFocus?.();
-      term.dispose();
-    };
-  }, []);
-
-  return (
-    <div style={{ width: "100%", height: "100%", padding: "10px", boxSizing: "border-box" }}>
-      <div ref={terminalRef} style={{ width: "100%", height: "100%" }} />
-    </div>
-  );
+  }, [started]);
 });

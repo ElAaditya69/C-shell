@@ -255,6 +255,26 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     []
   );
 
+  const fontExtension = useMemo(() => {
+    const family = settings.fontFamily || 'JetBrainsMono Nerd Font';
+    const fontStack = `"${family}", "JetBrainsMono Nerd Font", "JetBrains Mono", Menlo, Monaco, Consolas, "Courier New", monospace`;
+    return EditorView.theme({
+      '&': {
+        fontSize: `${settings.editorFontSize || 14}px`,
+        fontFamily: fontStack,
+      },
+      '.cm-content': {
+        fontFamily: fontStack,
+      },
+      '.cm-gutters': {
+        fontFamily: fontStack,
+      },
+      '.cm-line': {
+        fontFamily: fontStack,
+      },
+    });
+  }, [settings.fontFamily, settings.editorFontSize]);
+
   return (
     <div
       className="editor-container"
@@ -318,6 +338,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
           theme={editorTheme}
           extensions={[
             editorHighlight,
+            fontExtension,
             cpp(),
             search({ top: true }),
             EditorView.updateListener.of(() => {

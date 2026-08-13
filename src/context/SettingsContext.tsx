@@ -38,9 +38,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   terminalHeight: 200,
   showToolbarLabels: true,
   editorFontSize: 14,
-  fontFamily: "JetBrains Mono",
+  fontFamily: "JetBrainsMono Nerd Font",
   terminalFontSize: 14,
-  terminalFontFamily: "JetBrains Mono",
+  terminalFontFamily: "JetBrainsMono Nerd Font",
   useTabsIndent: false,
   tabSize: 4,
   wordWrap: true,
@@ -115,11 +115,9 @@ const USER_CSS_ID = "c-shell-user-css";
     saved value down to its first named face. Unknown/custom strings are kept
     as-is so a power-user's direct CSS font value still applies. */
 export function normalizeFontFamily(value: string | undefined): string {
-  if (!value) return "JetBrains Mono";
-  const first = value.split(",")[0]?.trim().replace(/^['"]|['"]$/g, "");
-  if (first && first.toLowerCase() !== "sans-serif" && first !== "monospace") {
-    return first;
-  }
+  if (!value) return "JetBrainsMono Nerd Font, JetBrains Mono, monospace";
+  // For simplicity, we return the value as is to support font stacks.
+  // Legacy behavior of taking the first face is not needed for our current defaults.
   return value;
 }
 
