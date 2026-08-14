@@ -211,4 +211,10 @@ export const XTermView = forwardRef<XTermHandle, XTermProps>(function XTermView(
       }
     })();
   }, [started]);
+
+  return (
+    <div style={{ width: "100%", height: "100%", padding: "10px", boxSizing: "border-box" }}>
+      <div ref={terminalRef} style={{ width: "100%", height: "100%" }} />
+    </div>
+  );
 });

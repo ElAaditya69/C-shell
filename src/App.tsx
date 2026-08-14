@@ -192,10 +192,13 @@ function App() {
     }
 
     setActivityState('compiling');
+    console.log('[RUN] About to call compileAndRun');
     try {
       await CompileService.compileAndRun(tabToRun.code, tabToRun.path!, cStandard);
+      console.log('[RUN] compileAndRun completed');
       setActivityState('running');
     } catch (error) {
+      console.error('[RUN] compileAndRun error:', error);
       alert(`Failed to run: ${error}`);
       setActivityState('idle');
     }
