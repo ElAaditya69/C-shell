@@ -17,7 +17,7 @@
 - **4 Theme Presets** — Retro (default), Midnight, Solarized, and Light — powered by CSS design tokens.
 - **Customizable Fonts** — Editor and terminal font family & size preferences.
 - **Smart Editing** — Line comments (`Ctrl+/`), block comments (`Shift+Alt+A`), move/duplicate lines, multi-cursor, bookmarks.
-- **Code Formatting** — Integrated `clang-format` support (`Ctrl+Shift+F`).
+- **Code Formatting** — Integrated `clang-format` support (`Ctrl+Shift+Alt+F`).
 - **Auto Clean on Save** — Trims trailing whitespace and ensures a final newline.
 
 ### 🧭 Navigation & Productivity

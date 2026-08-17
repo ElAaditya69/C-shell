@@ -1,8 +1,9 @@
 import { forwardRef, useImperativeHandle, useRef, useState, useEffect, useMemo } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
+import type { SyntaxNode } from '@lezer/common';
 import { cpp } from '@codemirror/lang-cpp';
 import {
   toggleLineComment,
@@ -10,6 +11,7 @@ import {
   copyLineDown,
   moveLineUp,
   moveLineDown,
+  insertTab,
 } from '@codemirror/commands';
 import {
   search,
@@ -20,8 +22,11 @@ import {
 import { keymap, rectangularSelection, crosshairCursor, drawSelection } from '@codemirror/view';
 import type { EditorView as EditorViewType } from '@codemirror/view';
 import { indentUnit } from '@codemirror/language';
+import { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { useSettings } from '../../context/SettingsContext';
+import { useBookmarks, bookmarkGutterExtension } from '../../hooks/useBookmarks';
 
 interface EditorProps {
   code: string;
@@ -43,8 +48,19 @@ export interface EditorHandle {
 
 interface SymbolItem {
   name: string;
-  kind: 'function' | 'struct' | 'macro';
+  kind: 'function' | 'struct' | 'macro' | 'enum' | 'typedef';
   line: number;
+}
+
+/** Small icons for each symbol kind (used in the modal + outline dropdown). */
+function kindIcon(kind: SymbolItem['kind']): string {
+  switch (kind) {
+    case 'function': return '⚡';
+    case 'struct': return '📦';
+    case 'enum': return '🎨';
+    case 'typedef': return '🏷️';
+    case 'macro': return '#';
+  }
 }
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
@@ -55,42 +71,202 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
   const { settings } = useSettings();
   const [symbolModalOpen, setSymbolModalOpen] = useState(false);
   const [symbols, setSymbols] = useState<SymbolItem[]>([]);
-  const [currentSymbol, setCurrentSymbol] = useState<string | null>(null);
+  // Mirror for the update listener (created once): the listener reads the
+  // CURRENT symbol list without re-creating the extension on every parse.
+  const symbolsRef = useRef<SymbolItem[]>([]);
+  // Which symbol the cursor is currently inside — drives the outline's
+  // active item. Derived from the tree in the update listener below.
+  const [activeSymbolName, setActiveSymbolName] = useState<string | null>(null);
+  // Debounce handle for the tree re-parse (300 ms after last transaction).
+  const symbolParseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Keep the latest callback in a ref so the cursor-tracking extension is
   // created once and never re-triggers @uiw's reconfigure effect.
   const onCursorChangeRef = useRef(onCursorChange);
   onCursorChangeRef.current = onCursorChange;
   const lastCursorHeadRef = useRef(-1);
 
-  // Parse symbols (functions and structs) from C code
-  useEffect(() => {
-    const parsed: SymbolItem[] = [];
-    const safeCode = typeof code === 'string' ? code : '';
-    const lines = safeCode.split('\n');
-    lines.forEach((line, idx) => {
-      // Functions
-      const fnMatch = line.match(/\b(?:int|void|float|double|char|long|short|bool|auto)\s+([a-zA-Z_]\w*)\s*\(/);
-      if (fnMatch && !line.includes(';')) {
-        parsed.push({ name: `${fnMatch[1]}()`, kind: 'function', line: idx + 1 });
+  // Parse symbols from the lezer syntax tree (via the editor view) so
+  // definitions, prototypes, pointers, static, multi-line signatures and
+  // anonymous-struct typedefs all resolve to the same nodes — a single-line
+  // regex cannot see any of those. Walk pre-order for stable ordering.
+  const parseSymbols = (view: EditorViewType | null): SymbolItem[] => {
+    if (!view) return [];
+    const body = syntaxTree(view.state).topNode;
+    const out: SymbolItem[] = [];
+
+    const text = (node: unknown) =>
+      view.state.doc.sliceString((node as { from: number }).from, (node as { to: number }).to);
+
+    const lineOf = (node: unknown) =>
+      view.state.doc.lineAt((node as { from: number }).from).number;
+
+    // Walks one cursor; `parentName` is the enclosing definition name so
+    // typedefs wrapped in struct/enum tags resolve to the typedef kind.
+    const walk = (node: unknown, parentName: string | null) => {
+      const t = (node as { type: { name: string } }).type.name;
+      // lezer nodes expose firstChild/nextSibling as getter properties,
+      // not methods — calling them throws `TypeError: node.firstChild is
+      // not a function`.
+      const children = () => {
+        const kids: unknown[] = [];
+        let c = (node as { firstChild: unknown | null }).firstChild;
+        while (c) {
+          kids.push(c);
+          c = (c as { nextSibling: unknown | null }).nextSibling;
+        }
+        return kids;
+      };
+      if (!t.includes('Preproc')) {
+        // Recurse into children first (deepest declaration wins, so the
+        // typedef's inner struct doesn't double-report).
+        const kids = children();
+        for (const ch of kids) walk(ch, parentName);
+      } else if (t === 'PreprocDirective') {
+        // #define — first child Identifier is the macro name.
+        let name = '';
+        for (const ch of children()) {
+          if ((ch as { type: { name: string } }).type.name === 'Identifier') {
+            name = text(ch).trim();
+            break;
+          }
+          // The Identifier can sit one level deeper (e.g. in a ParenExpr
+          // for function-like macros) — walk that subnode's children too.
+          let c2 = (ch as { firstChild: unknown | null }).firstChild;
+          while (c2) {
+            if ((c2 as { type: { name: string } }).type.name === 'Identifier') {
+              name = text(c2).trim();
+              break;
+            }
+            c2 = (c2 as { nextSibling: unknown | null }).nextSibling;
+          }
+          if (name) break;
+        }
+        if (name) out.push({ name: `#${name}`, kind: 'macro', line: lineOf(node) });
+        return;
       }
-      // Structs / Typedefs
-      const structMatch = line.match(/\b(?:struct|typedef struct)\s+([a-zA-Z_]\w*)/);
-      if (structMatch) {
-        parsed.push({ name: structMatch[1], kind: 'struct', line: idx + 1 });
+
+      if (t === 'FunctionDefinition') {
+        // Name = the FunctionDeclarator's Identifier (works for pointers,
+        // static, multi-line — the outer node stays FunctionDefinition).
+        let name = '';
+        for (const ch of children()) {
+          if ((ch as { type: { name: string } }).type.name === 'FunctionDeclarator') {
+            const id = ch as { firstChild: unknown | null };
+            let inner = id.firstChild;
+            while (inner) {
+              if ((inner as { type: { name: string } }).type.name === 'Identifier') {
+                name = text(inner).trim();
+                break;
+              }
+              inner = (inner as { nextSibling: unknown | null }).nextSibling;
+            }
+            break;
+          }
+        }
+        if (name) out.push({ name: `${name}()`, kind: 'function', line: lineOf(node) });
+        return;
       }
-      // Macros
-      const macroMatch = line.match(/#define\s+([a-zA-Z_]\w*)/);
-      if (macroMatch) {
-        parsed.push({ name: macroMatch[1], kind: 'macro', line: idx + 1 });
+
+      // A function PROTOTYPE is a bare Declaration whose FunctionDeclarator
+      // has no body: `int foo(int);` — the grammar gives the body case its own
+      // FunctionDefinition node, so definitions vs prototypes parse to
+      // different parents and prototypes are invisible to the code above.
+      if (t === 'Declaration') {
+        for (const ch of children()) {
+          if ((ch as { type: { name: string } }).type.name === 'FunctionDeclarator') {
+            let name = '';
+            const id = ch as { firstChild: unknown | null };
+            let inner = id.firstChild;
+            while (inner) {
+              if ((inner as { type: { name: string } }).type.name === 'Identifier') {
+                name = text(inner).trim();
+                break;
+              }
+              inner = (inner as { nextSibling: unknown | null }).nextSibling;
+            }
+            if (name) out.push({ name: `${name}()`, kind: 'function', line: lineOf(node) });
+            break;
+          }
+        }
+        // Struct/enum tags inside a declaration were already reported by the
+        // child recursion above — don't add anything else here.
+        return;
       }
+
+      // struct/enum specs — the tag (or typedef alias) is the TypeIdentifier
+      // child: `struct Point {…}` → struct Point; `typedef struct {…} Hidden;`
+      // → the alias lives on the spec, but it's a TYPEDEF, not a struct.
+      if (t === 'StructSpecifier' || t === 'EnumSpecifier') {
+        let name: string | null = null;
+        for (const ch of children()) {
+          if ((ch as { type: { name: string } }).type.name === 'TypeIdentifier') {
+            name = text(ch).trim();
+            break;
+          }
+        }
+        if (name) {
+          // Inside `typedef struct Name {…} Alias;` both the tag and the
+          // alias exist; the outermost typedef should own the symbol. The
+          // parentName mechanism keeps the spec from double-reporting the
+          // tag — the typedef walker below handles the alias.
+          if (parentName === '__TYPEDEF__') {
+            out.push({ name, kind: 'typedef', line: lineOf(node) });
+          } else {
+            out.push({
+              name,
+              kind: t === 'StructSpecifier' ? 'struct' : 'enum',
+              line: lineOf(node),
+            });
+          }
+        }
+        return;
+      }
+
+      // typedef <type> Name;
+      if (t === 'TypeDefinition') {
+        let alias: string | null = null;
+        let hasInnerSpec = false;
+        for (const ch of children()) {
+          const chName = (ch as { type: { name: string } }).type.name;
+          if (chName === 'TypeIdentifier') alias = text(ch).trim();
+          if (chName === 'StructSpecifier' || chName === 'EnumSpecifier') {
+            hasInnerSpec = true;
+            walk(ch, '__TYPEDEF__');
+          }
+        }
+        if (!hasInnerSpec && alias) {
+          // `typedef unsigned long size_t2;`
+          out.push({ name: alias, kind: 'typedef', line: lineOf(node) });
+        }
+        return;
+      }
+    };
+
+    walk(body, null);
+
+    // Dedup (a typedef whose inner struct is anonymous already names itself;
+    // an unhandled top-level node is skipped) — keep first occurrence.
+    const seen = new Set<string>();
+    return out.filter((s) => {
+      const k = `${s.kind}:${s.name}:${s.line}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
     });
+  };
+
+  useEffect(() => {
+    const parsed = parseSymbols(viewRef.current);
     setSymbols(parsed);
-    if (parsed.length > 0) {
-      setCurrentSymbol(parsed[0].name);
-    } else {
-      setCurrentSymbol(null);
-    }
-  }, [code]);
+    symbolsRef.current = parsed;
+    // Clean up the debounced parse if we unmount mid-typing.
+    return () => {
+      if (symbolParseTimer.current) {
+        clearTimeout(symbolParseTimer.current);
+        symbolParseTimer.current = null;
+      }
+    };
+  }, [code, viewRef, symbolModalOpen]);
 
   const jumpToLineNum = (lineNum: number) => {
     const view = viewRef.current;
@@ -107,25 +283,34 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     }
   };
 
-  const [bookmarks, setBookmarks] = useState<number[]>([]);
+  // Bookmarks are keyed by file path (per-file persistence across tab
+  // switches) — the store lives in localStorage (via useBookmarks), not in
+  // this mount, so unmounting the editor never loses them.
+  const { bookmarksFor, toggleBookmark: toggleStoredBookmark } = useBookmarks();
+  const activeBookmarkKey = fileName;
+  const bookmarksForFile = bookmarksFor(activeBookmarkKey);
+  // The gutter extension must see the CURRENT bookmark set for this file
+  // (it's recreated on change) — pass it through and let the memo follow.
+  const bookmarkGutterExtensionMemo = useMemo(
+    () => bookmarkGutterExtension(bookmarksForFile),
+    [bookmarksForFile]
+  );
 
+  // Same imperative surface as before — now backed by the per-path store.
   const toggleBookmark = () => {
     const view = viewRef.current;
     if (!view) return;
     const currentLine = view.state.doc.lineAt(view.state.selection.main.head).number;
-    setBookmarks((prev) =>
-      prev.includes(currentLine)
-        ? prev.filter((l) => l !== currentLine)
-        : [...prev, currentLine].sort((a, b) => a - b)
-    );
+    toggleStoredBookmark(activeBookmarkKey, currentLine);
   };
 
   const nextBookmark = () => {
-    if (bookmarks.length === 0) return;
+    if (bookmarksForFile.length === 0) return;
     const view = viewRef.current;
     if (!view) return;
     const currentLine = view.state.doc.lineAt(view.state.selection.main.head).number;
-    const nextLine = bookmarks.find((l) => l > currentLine) || bookmarks[0];
+    const nextLine =
+      bookmarksForFile.find((l) => l > currentLine) || bookmarksForFile[0];
     jumpToLineNum(nextLine);
   };
 
@@ -181,9 +366,65 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
     },
   }));
 
-  const indentExtension = settings.useTabsIndent
-    ? indentUnit.of('\t')
-    : indentUnit.of(' '.repeat(settings.tabSize || 4));
+  // Tabs ON → one tab character per indent level; OFF → spaces-per-tab.
+  // This is the single place the unit is derived — guides and tabSize
+  // extensions are synchronized to it below.
+  const indentUnitValue = settings.useTabsIndent
+    ? '\t'
+    : ' '.repeat(settings.tabSize || 4);
+  const indentExtension = indentUnit.of(indentUnitValue);
+
+  /* Vertical indent guides (VS Code-style). The Replit extension draws one
+     faint line per indentation level down the leading whitespace; stride is
+     the indent unit, so tabs/spaces follow the editor settings.
+     Colors must be CONCRETE values, not var() strings: the extension emits
+     them into a baseTheme '&light'/'&dark' layer that custom themes can
+     override, and var() references don't reliably resolve inside .cm-line's
+     own background (CodeMirror paints cm-content's bg on the same element,
+     shadowing the :root scope). Resolve the app's CSS variables to their
+     actual values ONCE per theme change below; if resolution ever comes
+     back empty, fall back to the retro theme's literals so guides never
+     render with undefined colors. */
+  const resolveGuideColors = () => {
+    const read = (v: string, fallback: string) => {
+      const resolved = getComputedStyle(document.documentElement)
+        .getPropertyValue(v)
+        .trim();
+      return resolved || fallback;
+    };
+    return {
+      light: read('--border', '#1a1c24'),
+      dark: read('--border', '#1a1c24'),
+      activeLight: read('--text-dim', '#8b8fa8'),
+      activeDark: read('--text-dim', '#8b8fa8'),
+    };
+  };
+
+  const indentGuidesExtension = useMemo(
+    () => {
+      const colors = resolveGuideColors();
+      return indentationMarkers({
+        highlightActiveBlock: true,
+        hideFirstIndent: false,
+        markerType: 'fullScope',
+        thickness: 1,
+        activeThickness: 1,
+        colors,
+      });
+    },
+    // Re-resolve when the theme (or custom CSS / font size affecting
+    // indent width) changes — the resolved literals are baked into the
+    // extension at construction time.
+    [
+      settings.theme,
+      settings.userCss,
+      settings.customThemes,
+      settings.tabSize,
+      settings.useTabsIndent,
+      settings.editorFontSize,
+      indentUnitValue,
+    ]
+  );
 
   /* Theme the editor from the app's CSS variables (instead of the hardcoded
      oneDark) so syntax colors follow theme changes, including custom themes.
@@ -228,6 +469,19 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         { dark: true }
       ),
     [settings.editorFontSize, settings.fontFamily]
+  );
+
+  /* Sync the state-level tabSize with the indent setting so the guide
+     extension (which measures leading whitespace against state.tabSize)
+     stays aligned with the configured indent unit. Tabs ON → tabSize is
+     the tab width; OFF → spaces-per-tab. The toggle is a dep so flipping
+     Tabs/Spaces re-creates this extension. */
+  const tabSizeExtension = useMemo(
+    () =>
+      EditorState.tabSize.of(
+        settings.useTabsIndent ? settings.tabSize || 4 : settings.tabSize || 4
+      ),
+    [settings.tabSize, settings.useTabsIndent]
   );
 
   /* Amber-tinted retro syntax palette driven by the same CSS variables. */
@@ -304,13 +558,28 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         }}
       >
         <span>📄 {fileName}</span>
-        {currentSymbol && (
-          <>
-            <span>›</span>
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
-              {currentSymbol}
-            </span>
-          </>
+        <span>›</span>
+        {/* Outline dropdown: jump to any symbol in the file; highlights the
+            one under the cursor (activeSymbolName) as you move around. */}
+        {symbols.length > 0 ? (
+          <select
+            className="editor-outline-select"
+            value={activeSymbolName ?? (symbols[0]?.name ?? '')}
+            onChange={(e) => {
+              const sym = symbols.find((s) => s.name === e.target.value);
+              if (sym) {
+                jumpToLineNum(sym.line);
+              }
+            }}
+          >
+            {symbols.map((sym) => (
+              <option key={`${sym.kind}:${sym.name}:${sym.line}`} value={sym.name}>
+                {kindIcon(sym.kind)} {sym.name} — Ln {sym.line}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>C definitions</span>
         )}
         <button
           onClick={() => setSymbolModalOpen(true)}
@@ -341,30 +610,75 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
             fontExtension,
             cpp(),
             search({ top: true }),
-            EditorView.updateListener.of(() => {
+            EditorView.updateListener.of((update) => {
               const view = viewRef.current;
               if (!view) return;
               // Only react when the cursor actually moved. Reconfigure updates
               // (e.g. font/theme changes) still fire this listener; skipping
               // unchanged positions keeps reconfigures from re-rendering App.
-              const pos = view.state.selection.main.head;
-              if (lastCursorHeadRef.current === pos) return;
+              const pos = update.state.selection.main.head;
+              if (!update.docChanged && lastCursorHeadRef.current === pos) return;
               lastCursorHeadRef.current = pos;
-              const line = view.state.doc.lineAt(pos);
+              const line = update.state.doc.lineAt(pos);
               onCursorChangeRef.current?.({ line: line.number, col: pos - line.from + 1 });
+              // Enclosing symbol for the outline's active marker: walk up from
+              // the cursor to the nearest definition/declaration node.
+              const node = syntaxTree(view.state).resolveInner(pos, 1);
+              let cursor: SyntaxNode | null = node;
+              let active: string | null = null;
+              let hops = 0;
+              while (cursor && hops < 3) {
+                const t = cursor.type.name;
+                if (t === 'FunctionDefinition') {
+                  active = (symbolsRef.current.find((s) => s.kind === 'function' && s.line === view.state.doc.lineAt(cursor!.from).number)?.name) ?? null;
+                  break;
+                }
+                if (t === 'StructSpecifier' || t === 'EnumSpecifier' || t === 'TypeDefinition') {
+                  const ln = view.state.doc.lineAt(cursor.from).number;
+                  active = symbolsRef.current.find((s) => s.line === ln)?.name ?? null;
+                  break;
+                }
+                cursor = cursor.parent;
+                hops++;
+              }
+              if (active !== activeSymbolName) setActiveSymbolName(active);
+              // Symbol list: re-parse only when the document actually
+              // changed (typed text, paste, undo/redo), and debounced 300 ms —
+              // re-walking the whole tree on every keystroke makes large
+              // files stutter. Pure cursor/viewport/selection updates never
+              // change the doc, so they skip the parse entirely. The tree is
+              // already at the NEW doc here, so read update.state, never a
+              // stale viewRef snapshot.
+              if (update.docChanged) {
+                if (symbolParseTimer.current) {
+                  clearTimeout(symbolParseTimer.current);
+                }
+                symbolParseTimer.current = setTimeout(() => {
+                  const parsed = parseSymbols(viewRef.current);
+                  setSymbols(parsed);
+                  symbolsRef.current = parsed;
+                }, 300);
+              }
             }),
             drawSelection(),
             rectangularSelection(),
             crosshairCursor(),
             keymap.of([
               ...searchKeymap,
-              { key: 'Mod-h', run: openSearchPanel },
+              // Tab inserts the indent unit (tabs or configured spaces) instead
+              // of the browser default focus-nav; keeps guides aligned when
+              // typing at the start of a line with spaces mode.
+              { key: 'Tab', run: insertTab },
+                      { key: 'Mod-h', run: openSearchPanel },
               { key: 'Mod-g', run: gotoLine },
               { key: 'Alt-ArrowDown', run: moveLineDown },
               { key: 'Alt-ArrowUp', run: moveLineUp },
               { key: 'Shift-Alt-ArrowDown', run: copyLineDown },
             ]),
             indentExtension,
+            tabSizeExtension,
+            indentGuidesExtension,
+            bookmarkGutterExtensionMemo,
             ...(settings.wordWrap ? [EditorView.lineWrapping] : []),
           ]}
           onChange={onChange}
@@ -425,7 +739,6 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
                     key={i}
                     onClick={() => {
                       jumpToLineNum(sym.line);
-                      setCurrentSymbol(sym.name);
                       setSymbolModalOpen(false);
                     }}
                     style={{
@@ -440,8 +753,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
                     }}
                   >
                     <span>
-                      {sym.kind === 'function' ? '⚡ ' : sym.kind === 'struct' ? '📦 ' : '🏷️ '}
-                      {sym.name}
+                      {kindIcon(sym.kind)} {sym.name}
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
                       Ln {sym.line}

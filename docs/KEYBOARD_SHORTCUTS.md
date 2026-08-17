@@ -100,7 +100,7 @@ These actions can be invoked from the Command Palette (`Ctrl + Shift + P`):
 |---|---|
 | `▶ Run Code` | Compile and execute the current file |
 | `🔨 Build Only` | Compile without running |
-| `✨ Format Code` | Format with clang-format |
+| `✨ Format Code` | Format with clang-format (`Ctrl + Shift + Alt + F`) |
 | `💾 Save File` | Save the active file |
 | `📝 New File` | Create a new untitled file |
 | `📁 Open Folder` | Open a project directory |

@@ -18,6 +18,7 @@ export interface TerminalPanelHandle {
   toggle: () => void;
   isVisible: () => boolean;
   sendInterrupt: () => void;
+  ensureStarted: () => Promise<void>;
 }
 
 interface TerminalPanelProps {
@@ -69,9 +70,19 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
       },
       isVisible: () => visibleRef.current,
       sendInterrupt,
+      ensureStarted: async () => {
+        // show() only sets state — XTermView mounts on the next render
+        // flush, so wait (bounded) for the handle before starting the pty.
+        if (!startedRef.current) showTerminal();
+        const deadline = Date.now() + 1500;
+        while (!xtermRef.current && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        await xtermRef.current?.ensureStarted();
+      },
     }),
     [showTerminal, sendInterrupt]
-  );
+  ); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -135,7 +146,10 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
     : 0;
 
   return (
-    <div className="terminal-panel" style={{ height: panelHeight, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div
+      className={`terminal-panel${visible ? "" : " collapsed"}`}
+      style={{ height: panelHeight, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+    >
       {mode === "normal" && (
         <div className="terminal-drag-handle" onMouseDown={startDrag} />
       )}

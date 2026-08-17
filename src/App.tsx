@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { CompileService } from './services/CompileService';
+import { CompileService, RunConfig } from './services/CompileService';
+import { RunConfigModal } from './components/common/RunConfigModal';
 import { FileService } from './services/FileService';
 import { FormatService } from './services/FormatService';
 import { Editor, EditorHandle } from './components/editor/Editor';
@@ -10,7 +11,7 @@ import { QuickOpen } from './components/editor/QuickOpen';
 import { WelcomeScreen } from './components/common/WelcomeScreen';
 import { TerminalPanel, TerminalPanelHandle } from './components/terminal/TerminalPanel';
 import { RUN_FINISHED_EVENT } from './components/terminal/XTermView';
-import { Toolbar, ActivityState } from './components/toolbar/Toolbar';
+import { Toolbar, ActivityState, C_STANDARDS } from './components/toolbar/Toolbar';
 import { FileTree } from './components/sidebar/FileTree';
 import { ScreenshotModal } from './components/screenshot/ScreenshotModal';
 import { LabReportModal } from './components/report/LabReportModal';
@@ -36,12 +37,19 @@ function App() {
   const [zenMode, setZenMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [splitView, setSplitView] = useState(false);
-  const [cStandard, setCStandard] = useState("c99");
+  // useSettings must run before any state initialized from settings —
+  // its destructured consts are referenced during render.
+  const { settings, isSettingsLoaded, updateSettings } = useSettings();
+  // The ACTIVE C standard — the source of truth for both the toolbar select
+  // and the -std flag. Initialized from persisted settings.cStandard so a
+  // saved C11 isn't silently ignored after restart.
+  const [cStandard, setCStandard] = useState(() => settings.cStandard || "c99");
+  const [runConfig, setRunConfig] = useState<RunConfig>({ args: [] });
+  const [runConfigOpen, setRunConfigOpen] = useState(false);
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({
     line: 1,
     col: 1,
   });
-  const { settings, isSettingsLoaded } = useSettings();
   const editorRef = useRef<EditorHandle>(null);
   const splitEditorRef = useRef<EditorHandle>(null);
   const terminalRef = useRef<TerminalPanelHandle>(null);
@@ -57,11 +65,14 @@ function App() {
     saveFile,
     saveFileAs,
     closeTab,
+    reorderTabs,
     removeTabForPath,
     renameTabForPath,
     hasCrashBackup,
     restoreCrashBackup,
     dismissCrashBackup,
+    exportCrashBackup,
+    importCrashBackup,
   } = useTabs();
 
   const {
@@ -70,6 +81,7 @@ function App() {
     refreshKey,
     loadDirectory,
     refresh,
+    closeFolder,
     openFolder,
     openFileDialog,
     deleteFile,
@@ -80,6 +92,24 @@ function App() {
 
   const isRestoredRef = useRef(false);
 
+  // C standard: settings are the single source of truth. When they load (or
+  // change via Settings → C Standard), mirror them into the active state; if
+  // a stored value isn't a known standard (e.g. pasted from an old settings
+  // file), reset it to the default instead of compiling with a bogus -std.
+  useEffect(() => {
+    if (!isSettingsLoaded) return;
+    const valid = C_STANDARDS.map((s) => s.toLowerCase());
+    if (settings.cStandard && valid.includes(settings.cStandard.toLowerCase())) {
+      setCStandard(settings.cStandard.toLowerCase());
+    } else {
+      setCStandard("c99");
+      // Persist the correction so the invalid value doesn't reappear.
+      if (settings.cStandard !== "c99") {
+        void updateSettings({ cStandard: "c99" });
+      }
+    }
+  }, [isSettingsLoaded, settings.cStandard, updateSettings]);
+
   useEffect(() => {
     if (!isSettingsLoaded || isRestoredRef.current) return;
     // Mark this before awaiting directory/file reads. Those reads update settings
@@ -87,9 +117,15 @@ function App() {
     isRestoredRef.current = true;
     (async () => {
       try {
-        const targetDir =
-          settings.lastDir || (await invoke<string>('get_home_dir'));
-        if (targetDir) await loadDirectory(targetDir);
+        // Only restore the folder the user explicitly opened last session.
+        // No folder fallback — if nothing was opened, show the "no folder
+        // open" empty state (like VS Code) rather than dumping a parent
+        // directory's contents.
+        const targetDir = settings.lastDir;
+        if (targetDir) {
+          await FileService.setWorkspace(targetDir);
+          await loadDirectory(targetDir);
+        }
 
         if (settings.openTabs && settings.openTabs.length > 0) {
           for (const path of settings.openTabs) {
@@ -102,10 +138,16 @@ function App() {
     })();
   }, [isSettingsLoaded, loadDirectory, openFile, settings.lastDir, settings.openTabs]);
 
+  // A tab counts as dirty if its content differs from what's on disk OR it
+  // was never saved at all (untitled tabs have path === null and
+  // code === savedCode, but their content exists only in memory — dropping
+  // it on quit would lose the file silently).
+  const hasUnsavedWork = (list: { code: string; savedCode: string; path: string | null }[]) =>
+    list.some((t) => t.code !== t.savedCode || t.path === null);
+
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasUnsaved = tabs.some((t) => t.code !== t.savedCode);
-      if (hasUnsaved) {
+      if (hasUnsavedWork(tabs)) {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -116,6 +158,11 @@ function App() {
 
   const handleOpenFolder = async () => {
     await openFolder();
+  };
+
+  const handleCloseFolder = async () => {
+    closeFolder();
+    await updateSettings({ lastDir: null });
   };
 
   const handleOpenFile = async () => {
@@ -158,8 +205,12 @@ function App() {
   const runCode = async () => {
     if (!activeTab) return;
 
-    // Show the terminal so the user can see output as it starts.
+    // Show the terminal so the user can see output as it starts, and wait
+    // for the pty to actually exist before typing the compile/run command —
+    // otherwise build output and the run command are dropped ("Terminal not
+    // started") and Run appears to do nothing.
     terminalRef.current?.show();
+    await terminalRef.current?.ensureStarted();
 
     let tabToRun = activeTab;
     if (!tabToRun.path) {
@@ -183,7 +234,10 @@ function App() {
       /* Python support — run via terminal */
       setActivityState('running');
       try {
-        await FileService.sendCommand(`python3 "${tabToRun.path}"\n`);
+        // Python runs through the backend command (path passed as argv, no
+      // shell interpolation), so a filename with `"`, `$()`, backticks or
+      // `;` can never escape into a shell string.
+      await CompileService.runPython(tabToRun.path!);
       } catch {
         alert('Failed to run Python file. Ensure python3 is in PATH.');
       }
@@ -192,10 +246,8 @@ function App() {
     }
 
     setActivityState('compiling');
-    console.log('[RUN] About to call compileAndRun');
     try {
-      await CompileService.compileAndRun(tabToRun.code, tabToRun.path!, cStandard);
-      console.log('[RUN] compileAndRun completed');
+      await CompileService.compileAndRun(tabToRun.code, tabToRun.path!, cStandard, runConfig, currentDir);
       setActivityState('running');
     } catch (error) {
       console.error('[RUN] compileAndRun error:', error);
@@ -226,7 +278,7 @@ function App() {
 
     setActivityState('building');
     try {
-      await CompileService.build(tabToBuild.code, tabToBuild.path!, cStandard);
+      await CompileService.build(tabToBuild.code, tabToBuild.path!, cStandard, currentDir);
     } catch (error) {
       alert(`Failed to build: ${error}`);
     }
@@ -261,6 +313,7 @@ function App() {
     return () => window.removeEventListener(RUN_FINISHED_EVENT, handleRunFinished);
   }, []);
 
+  
   const tabsRef = useRef(tabs);
   useEffect(() => {
     tabsRef.current = tabs;
@@ -271,7 +324,7 @@ function App() {
 
     (async () => {
       unlisten = await listen('quit-requested', async () => {
-        const hasUnsaved = tabsRef.current.some((t) => t.code !== t.savedCode);
+        const hasUnsaved = hasUnsavedWork(tabsRef.current);
 
         if (!hasUnsaved) {
           await invoke('confirm_quit');
@@ -369,9 +422,21 @@ function App() {
         handleSaveAs();
         return;
       }
-      if (mod && e.shiftKey && key === 'f') {
+      /* Search & Replace in Workspace: Ctrl+Shift+F (standard convention) */
+      if (mod && e.shiftKey && !e.altKey && key === 'f') {
+        e.preventDefault();
+        setSearchModalVisible(true);
+        return;
+      }
+      /* Format code: Ctrl+Shift+Alt+F (Ctrl+Alt+F / Ctrl+Shift+F are search) */
+      if (mod && e.shiftKey && e.altKey && key === 'f') {
         e.preventDefault();
         formatCode();
+        return;
+      }
+      if (mod && e.altKey && key === 'f') {
+        e.preventDefault();
+        setSearchModalVisible(true);
         return;
       }
       if (mod && key === 's') {
@@ -433,6 +498,18 @@ function App() {
         terminalRef.current?.toggle();
         return;
       }
+      /* Toggle line bookmark: Ctrl+F2 */
+      if (mod && key === 'f2') {
+        e.preventDefault();
+        editorRef.current?.toggleBookmark();
+        return;
+      }
+      /* Jump to next bookmark: F2 */
+      if (!mod && key === 'f2') {
+        e.preventDefault();
+        editorRef.current?.nextBookmark();
+        return;
+      }
       /* Help / Shortcuts: Ctrl+Shift+H — opens the same shortcuts list the
          status-bar "?" opens (the command palette doubles as the help panel). */
       if (mod && e.shiftKey && key === 'h') {
@@ -448,7 +525,12 @@ function App() {
   }, [tabs, activeTab, activeTabId, quickOpenVisible, zenMode, presentationMode]);
 
   const handleSelectDiagnostic = (diag: { file: string; line: number; col: number }) => {
-    const matchingTab = tabs.find((t) => t.name === diag.file || t.path?.endsWith(diag.file));
+    // diag.file may be a full path (normal gcc lines) or a bare word
+    // (linker/collect2 lines, line=0) — match by exact path, then basename.
+    const diagBase = diag.file.split(/[/\\]/).pop();
+    const matchingTab = tabs.find(
+      (t) => t.path === diag.file || (diagBase && t.name === diagBase)
+    );
     if (matchingTab) {
       setActiveTabId(matchingTab.id);
     }
@@ -464,7 +546,7 @@ function App() {
   const commandActions: CommandAction[] = [
     { id: 'run', label: '▶ Run Code', category: 'Build', shortcut: 'Ctrl+Enter', perform: runCode },
     { id: 'build', label: '🔨 Build Only', category: 'Build', perform: buildCode },
-    { id: 'format', label: '✨ Format Code', category: 'Edit', shortcut: 'Ctrl+Shift+F', perform: formatCode },
+    { id: 'format', label: '✨ Format Code', category: 'Edit', shortcut: 'Ctrl+Shift+Alt+F', perform: formatCode },
     { id: 'save', label: '💾 Save File', category: 'File', shortcut: 'Ctrl+S', perform: handleSave },
     { id: 'new', label: '📝 New File', category: 'File', shortcut: 'Ctrl+N', perform: newFile },
     { id: 'open-folder', label: '📁 Open Folder', category: 'File', shortcut: 'Ctrl+O', perform: handleOpenFolder },
@@ -587,6 +669,26 @@ function App() {
             </button>
             <button
               className="action-btn secondary"
+              onClick={async () => {
+                const err = await exportCrashBackup();
+                if (err) alert(err);
+              }}
+              style={{ padding: "4px 12px", fontSize: "12px" }}
+            >
+              Export…
+            </button>
+            <button
+              className="action-btn secondary"
+              onClick={async () => {
+                const err = await importCrashBackup();
+                if (err) alert(err);
+              }}
+              style={{ padding: "4px 12px", fontSize: "12px" }}
+            >
+              Import…
+            </button>
+            <button
+              className="action-btn secondary"
               onClick={dismissCrashBackup}
               style={{ padding: "4px 12px", fontSize: "12px" }}
             >
@@ -610,12 +712,14 @@ function App() {
           onRenameNode={handleRename}
           onNewFolder={createFolder}
           onNewFileInFolder={handleNewFileInFolder}
+          onCloseFolder={handleCloseFolder}
         />
 
         <div className="editor-panel">
           {settings.showToolbar !== false && (
             <Toolbar
               onRun={runCode}
+              onOpenRunConfig={() => setRunConfigOpen(true)}
               onBuild={buildCode}
               onFormat={formatCode}
               onScreenshot={() => setScreenshotModalVisible(true)}
@@ -629,6 +733,7 @@ function App() {
               onToggleSplitView={toggleSplitView}
               isSplitView={splitView}
               activityState={activityState}
+              standard={cStandard}
               onStandardChange={(s) => setCStandard(s.toLowerCase())}
             />
           )}
@@ -639,6 +744,7 @@ function App() {
               activeTabId={activeTabId}
               onSelect={setActiveTabId}
               onClose={closeTab}
+              onReorder={reorderTabs}
             />
 
             {activeTab ? (
@@ -779,6 +885,14 @@ function App() {
         <SnippetsModal
           onInsert={handleInsertSnippet}
           onClose={() => setSnippetsModalVisible(false)}
+        />
+      )}
+
+      {runConfigOpen && (
+        <RunConfigModal
+          config={runConfig}
+          onSave={setRunConfig}
+          onClose={() => setRunConfigOpen(false)}
         />
       )}
       </div>

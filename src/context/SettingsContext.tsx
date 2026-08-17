@@ -30,6 +30,7 @@ export interface AppSettings {
   backupInterval: number;
   backupCount: number;
   backupDir: string;
+  cStandard: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -60,6 +61,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   backupInterval: 30,
   backupCount: 5,
   backupDir: "~/.cshell/backups/",
+  cStandard: "c99",
 };
 
 interface SettingsContextType {

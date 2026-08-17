@@ -1,4 +1,4 @@
-import { FileNode } from "../../services/FileService";
+import { FileNode, dirName } from "../../services/FileService";
 
 interface ContextMenuProps {
   x: number;
@@ -50,7 +50,7 @@ export function ContextMenu({
         </button>
         <button
           onClick={action(() => {
-            const parentDir = node.path.substring(0, node.path.lastIndexOf("/"));
+            const parentDir = dirName(node.path);
             navigator.clipboard.writeText(parentDir || node.path);
           })}
         >

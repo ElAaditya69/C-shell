@@ -25,6 +25,8 @@ export function SearchInFilesModal({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [replacedCount, setReplacedCount] = useState<number | null>(null);
+  const [useRegex, setUseRegex] = useState(false);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
 
   const flattenFiles = (nodes: FileNode[]): FileNode[] => {
     let acc: FileNode[] = [];
@@ -71,17 +73,50 @@ export function SearchInFilesModal({
 
   const handleReplaceAll = async () => {
     if (!query || results.length === 0) return;
+    setReplaceError(null);
+
+    // Regex mode: validate the pattern up front so an invalid query (e.g.
+    // "(", "[", "\") surfaces one friendly error instead of silently dying
+    // mid-loop on the first path.
+    let regex: RegExp | null = null;
+    if (useRegex) {
+      try {
+        regex = new RegExp(query, "gi");
+      } catch {
+        setReplaceError(
+          "Query can't be used for replacement — it contains regex characters."
+        );
+        return;
+      }
+    }
+
     const uniquePaths = Array.from(new Set(results.map((r) => r.filePath)));
     let totalReplaced = 0;
 
     for (const path of uniquePaths) {
       try {
         const content = await FileService.readFile(path);
-        const regex = new RegExp(query, "gi");
-        const matches = content.match(regex);
-        if (matches) {
-          totalReplaced += matches.length;
-          const updated = content.replace(regex, replaceQuery);
+        let updated: string;
+        if (regex) {
+          const matches = content.match(regex);
+          if (matches) {
+            totalReplaced += matches.length;
+            updated = content.replace(regex, replaceQuery);
+          } else {
+            updated = content;
+          }
+        } else {
+          // Literal mode: replace plain text without any regex interpretation,
+          // so "[", "(", ".", "*", "\" etc. are replaced verbatim.
+          const parts = content.split(query);
+          if (parts.length > 1) {
+            totalReplaced += parts.length - 1;
+            updated = parts.join(replaceQuery);
+          } else {
+            updated = content;
+          }
+        }
+        if (updated !== content) {
           await FileService.writeFile(path, updated);
         }
       } catch (e) {
@@ -116,7 +151,10 @@ export function SearchInFilesModal({
               type="text"
               placeholder="Search across all project files..."
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setReplaceError(null);
+              }}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               autoFocus
               style={{
@@ -152,6 +190,25 @@ export function SearchInFilesModal({
             />
           </div>
 
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "12px",
+              color: "var(--text-dim)",
+              cursor: "pointer",
+              userSelect: "none",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={useRegex}
+              onChange={(e) => setUseRegex(e.target.checked)}
+            />
+            Regular expression (treat query as regex)
+          </label>
+
           <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
             <button
               className="action-btn primary"
@@ -170,6 +227,22 @@ export function SearchInFilesModal({
             )}
           </div>
         </div>
+
+        {replaceError && (
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "8px 12px",
+              borderRadius: "6px",
+              background: "rgba(231, 76, 60, 0.15)",
+              color: "#e74c3c",
+              fontSize: "13px",
+              fontWeight: 600,
+            }}
+          >
+            ⚠️ {replaceError}
+          </div>
+        )}
 
         {replacedCount !== null && (
           <div

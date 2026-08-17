@@ -647,6 +647,19 @@ function EditorTab() {
             onChange={(v) => set("fontFamily", v)}
           />
         </ControlRow>
+
+        <Divider />
+
+        <ControlRow
+          label="C Standard"
+          value={`-std=${settings.cStandard}`}
+        >
+          <StyledSelect
+            value={settings.cStandard}
+            options={["c89", "c99", "c11", "c17", "gnu99"]}
+            onChange={(v) => set("cStandard", v)}
+          />
+        </ControlRow>
       </Section>
 
       <Section label="Editor Behavior" style={{ marginTop: 28 }}>

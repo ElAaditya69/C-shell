@@ -19,4 +19,8 @@ impl TerminalService {
     pub fn resize(&self, rows: u16, cols: u16) -> Result<(), String> {
         self.engine.resize(rows, cols)
     }
+
+    pub fn kill(&self) {
+        self.engine.kill()
+    }
 }

@@ -203,6 +203,7 @@ dependencies = [
 name = "c-shell"
 version = "0.6.0-2"
 dependencies = [
+ "libc",
  "portable-pty",
  "serde",
  "serde_json",

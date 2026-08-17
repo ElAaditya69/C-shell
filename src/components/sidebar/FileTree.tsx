@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FileNode, FileService } from "../../services/FileService";
+import { FileNode, FileService, splitPath } from "../../services/FileService";
 import { FileTreeNode } from "./FileTreeNode";
 import { ContextMenu } from "./ContextMenu";
 import { useSettings } from "../../context/SettingsContext";
@@ -17,6 +17,7 @@ interface FileTreeProps {
   onRenameNode: (path: string, currentName: string) => void;
   onNewFolder: (parentPath: string) => void;
   onNewFileInFolder: (parentPath: string) => void;
+  onCloseFolder: () => void;
 }
 
 const MIN_WIDTH = 160;
@@ -35,6 +36,7 @@ export function FileTree({
   onRenameNode,
   onNewFolder,
   onNewFileInFolder,
+  onCloseFolder,
 }: FileTreeProps) {
   const [menu, setMenu] = useState<{ x: number; y: number; node: FileNode } | null>(
     null
@@ -87,7 +89,7 @@ export function FileTree({
   };
 
   const handleMoveNode = async (srcPath: string, targetFolderPath: string) => {
-    const fileName = srcPath.split("/").pop() || srcPath.split("\\").pop();
+    const fileName = splitPath(srcPath).pop();
     if (!fileName) return;
     const destPath = `${targetFolderPath}/${fileName}`;
     try {
@@ -176,13 +178,18 @@ export function FileTree({
               <button role="menuitem" onClick={onOpenFolder}>
                 📁 Open Folder
               </button>
+              {currentDir && (
+                <button role="menuitem" onClick={onCloseFolder}>
+                  ⛌ Close Folder
+                </button>
+              )}
             </div>
           )}
         </div>
       </div>
 
       <div className="file-tree-path">
-        {currentDir.split("/").pop() || currentDir.split("\\").pop() || "Workspace"}
+        {splitPath(currentDir).pop() || "None"}
       </div>
 
       {pinnedFolders.length > 0 && (
@@ -196,17 +203,24 @@ export function FileTree({
               onClick={() => onFileSelect(p)}
               style={{ fontSize: "12px", color: "var(--text-primary)", cursor: "pointer", padding: "2px 0" }}
             >
-              📁 {p.split("/").pop()}
+              📁 {splitPath(p).pop()}
             </div>
           ))}
         </div>
       )}
 
       <div className="file-list">
-        {processedFiles.length === 0 ? (
+        {!currentDir ? (
           <div className="empty-state">
-            <p>Nothing here yet</p>
-            <p>Click "Open" to browse a folder</p>
+            <p>No folder open</p>
+            <button className="action-btn secondary" onClick={onOpenFolder}>
+              📁 Open Folder
+            </button>
+          </div>
+        ) : processedFiles.length === 0 ? (
+          <div className="empty-state">
+            <p>No C files in this folder</p>
+            <p>Open Folder to browse elsewhere</p>
           </div>
         ) : (
           processedFiles.map((node) => (

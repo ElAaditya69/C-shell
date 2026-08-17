@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FileService, FileNode } from "../services/FileService";
+import { FileService, FileNode, dirName } from "../services/FileService";
 import { useSettings } from "../context/SettingsContext";
 
 export function useFileExplorer() {
@@ -10,6 +10,9 @@ export function useFileExplorer() {
 
   const loadDirectory = useCallback(async (dir: string) => {
     try {
+      // Make this the sandbox root (also covers restore / welcome-screen
+      // recent-project opens that bypass the folder dialog).
+      await FileService.setWorkspace(dir);
       const nodes = await FileService.listDirectory(dir);
       setFiles(nodes);
       setCurrentDir(dir);
@@ -23,6 +26,16 @@ export function useFileExplorer() {
     setRefreshKey((k) => k + 1);
     if (currentDir) loadDirectory(currentDir);
   }, [currentDir, loadDirectory]);
+
+  // Unload the current folder so the Explorer shows the "no folder open"
+  // empty state (like VS Code) instead of any directory's contents.
+  const closeFolder = useCallback(async () => {
+    setFiles([]);
+    setCurrentDir("");
+    setRefreshKey((k) => k + 1);
+    // Drop the sandbox root so no stale workspace stays trusted.
+    await FileService.setWorkspace(null);
+  }, []);
 
   const openFolder = useCallback(async () => {
     try {
@@ -38,18 +51,13 @@ export function useFileExplorer() {
 
   const openFileDialog = useCallback(async () => {
     try {
-      const file = await FileService.openFileDialog();
-      if (!file) return null;
-      const normalized = file.replace(/\\/g, "/");
-      const lastSlash = normalized.lastIndexOf("/");
-      const dir = lastSlash !== -1 ? normalized.substring(0, lastSlash) : normalized;
-      if (dir) await loadDirectory(dir);
-      return file;
+      // Native dialog result is already authorized for the parent dir.
+      return await FileService.openFileDialog();
     } catch (e) {
       alert(`${e}`);
       return null;
     }
-  }, [loadDirectory]);
+  }, []);
 
   const deleteFile = useCallback(
     async (path: string, isDir: boolean) => {
@@ -88,7 +96,7 @@ export function useFileExplorer() {
     async (parentPath: string): Promise<string | null> => {
       const name = prompt("New file name (e.g. main.c):");
       if (!name || !name.trim()) return null;
-      const fullPath = `${parentPath}/${name.trim()}`;
+      const fullPath = `${parentPath.replace(/\\/g, "/")}/${name.trim()}`;
       try {
         await FileService.createFile(fullPath);
         refresh();
@@ -107,7 +115,7 @@ export function useFileExplorer() {
       if (!newName || !newName.trim() || newName.trim() === currentName) {
         return null;
       }
-      const parentDir = path.substring(0, path.lastIndexOf("/"));
+      const parentDir = dirName(path);
       const newPath = `${parentDir}/${newName.trim()}`;
       try {
         await FileService.renamePath(path, newPath);
@@ -127,6 +135,7 @@ export function useFileExplorer() {
     refreshKey,
     loadDirectory,
     refresh,
+    closeFolder,
     openFolder,
     openFileDialog,
     deleteFile,

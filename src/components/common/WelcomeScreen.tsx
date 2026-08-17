@@ -16,7 +16,7 @@ const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: "Ctrl+S", action: "Save" },
   { keys: "Ctrl+P", action: "Quick Open" },
   { keys: "Ctrl+Shift+P", action: "Command Palette" },
-  { keys: "Ctrl+Shift+F", action: "Format Code" },
+  { keys: "Ctrl+Shift+Alt+F", action: "Format Code" },
   { keys: "Ctrl+`", action: "Toggle Terminal" },
 ];
 

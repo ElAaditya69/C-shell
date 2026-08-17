@@ -19,4 +19,8 @@ impl TerminalSession {
     pub fn resize(&self, rows: u16, cols: u16) -> Result<(), String> {
         self.pty.resize(rows, cols)
     }
+
+    pub fn kill(&self) {
+        self.pty.kill()
+    }
 }

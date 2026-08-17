@@ -12,6 +12,8 @@ export interface XTermHandle {
   clear: () => void;
   sendInterrupt: () => void;
   getBufferText: () => string;
+  /** Resolves once the pty has started (or rejects if start fails). */
+  ensureStarted: () => Promise<void>;
 }
 
 export interface XTermProps {
@@ -21,12 +23,38 @@ export interface XTermProps {
 const RUN_DONE_MARKER = "__CSHELL_RUN_DONE__";
 export const RUN_FINISHED_EVENT = "cshell:run-finished";
 
+// Multi-KB pastes must not wedge the pty writer lock: a single 100 KB
+// write holds the Mutex until the shell drains it, freezing terminal
+// output (reader thread) and every other send behind it. Split into
+// ≤512-char chunks with a 25 ms gap, awaited sequentially so chunks land
+// in order and no byte is dropped. Ctrl-C stays an instant single send.
+const PASTE_CHUNK_SIZE = 512;
+const PASTE_CHUNK_DELAY_MS = 25;
+
+async function sendPasteInChunks(text: string) {
+  for (let i = 0; i < text.length; i += PASTE_CHUNK_SIZE) {
+    const chunk = text.slice(i, i + PASTE_CHUNK_SIZE);
+    try {
+      await FileService.sendCommand(chunk);
+    } catch (err) {
+      console.error("Failed to send paste chunk:", err);
+      return; // abort on failure — don't send a partial paste past the error
+    }
+    if (i + PASTE_CHUNK_SIZE < text.length) {
+      await new Promise((r) => setTimeout(r, PASTE_CHUNK_DELAY_MS));
+    }
+  }
+}
+
 export const XTermView = forwardRef<XTermHandle, XTermProps>(function XTermView({ started = false }, ref) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const { settings } = useSettings();
   const hasStartedRef = useRef(false);
+  const startPromiseRef = useRef<Promise<void> | null>(null);
+  const startResolveRef = useRef<(() => void) | null>(null);
+  const startRejectRef = useRef<((e: unknown) => void) | null>(null);
 
   useImperativeHandle(ref, () => ({
     clear: () => xtermRef.current?.clear(),
@@ -48,6 +76,16 @@ export const XTermView = forwardRef<XTermHandle, XTermProps>(function XTermView(
         }
       }
       return lines.join("\n").trim();
+    },
+    ensureStarted: () => {
+      if (hasStartedRef.current) return Promise.resolve();
+      if (!startPromiseRef.current) {
+        startPromiseRef.current = new Promise<void>((resolve, reject) => {
+          startResolveRef.current = resolve;
+          startRejectRef.current = reject;
+        });
+      }
+      return startPromiseRef.current;
     },
   }));
 
@@ -82,7 +120,7 @@ export const XTermView = forwardRef<XTermHandle, XTermProps>(function XTermView(
         return false;
       }
       if (arg.ctrlKey && arg.shiftKey && arg.code === 'KeyV') {
-        navigator.clipboard.readText().then((txt) => FileService.sendCommand(txt));
+        navigator.clipboard.readText().then(sendPasteInChunks);
         return false;
       }
       return true;
@@ -194,7 +232,6 @@ export const XTermView = forwardRef<XTermHandle, XTermProps>(function XTermView(
   // Effect 3: Start the pty when the terminal is started
   useEffect(() => {
     if (!started || !xtermRef.current || hasStartedRef.current) return;
-
     const term = xtermRef.current;
     (async () => {
       try {
@@ -205,10 +242,12 @@ export const XTermView = forwardRef<XTermHandle, XTermProps>(function XTermView(
         if (!String(err).includes("already started")) {
           console.error("Failed to start terminal:", err);
           term.writeln(`\r\n[c-shell] Failed to start terminal: ${err}\r\n`);
+          startRejectRef.current?.(err);
         } else {
           hasStartedRef.current = true;
         }
       }
+      startResolveRef.current?.();
     })();
   }, [started]);
 

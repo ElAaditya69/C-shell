@@ -8,10 +8,11 @@ export type ActivityState =
   | "building"
   | "formatting";
 
-const C_STANDARDS = ["C89", "C99", "C11", "C17", "GNU99"];
+export const C_STANDARDS = ["C89", "C99", "C11", "C17", "GNU99"];
 
 interface ToolbarProps {
   onRun: () => void;
+  onOpenRunConfig: () => void;
   onBuild: () => void;
   onFormat: () => void;
   onScreenshot: () => void;
@@ -25,11 +26,15 @@ interface ToolbarProps {
   onToggleSplitView?: () => void;
   isSplitView?: boolean;
   activityState: ActivityState;
+  /** The ACTIVE C standard (lowercase, e.g. "c11") — mirrors App's state so
+      the select can never show one value while the compiler uses another. */
+  standard: string;
   onStandardChange?: (standard: string) => void;
 }
 
 export function Toolbar({
   onRun,
+  onOpenRunConfig,
   onBuild,
   onFormat,
   onScreenshot,
@@ -43,10 +48,10 @@ export function Toolbar({
   onToggleSplitView,
   isSplitView,
   activityState,
+  standard,
   onStandardChange,
 }: ToolbarProps) {
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [standard, setStandard] = useState("C99");
   const { settings } = useSettings();
   const busy = activityState !== "idle";
 
@@ -70,7 +75,7 @@ export function Toolbar({
   };
 
   return (
-    <div className="toolbar">
+    <div className={`toolbar ${showLabels ? "" : "labels-off"}`}>
       <div className="toolbar-left">
         <button
           className={`run-btn ${busy ? "running" : ""}`}
@@ -79,6 +84,15 @@ export function Toolbar({
           title="Run Code (Ctrl/Cmd+Enter)"
         >
           <span>{runLabel}</span>
+        </button>
+
+        <button
+          className="tool-btn"
+          onClick={onOpenRunConfig}
+          disabled={busy}
+          title="Run configuration — program args, stdin file, working directory"
+        >
+          ⚙
         </button>
 
         <div className="toolbar-divider" />
@@ -100,7 +114,7 @@ export function Toolbar({
           >
             {activityState === "formatting"
               ? showLabels ? "⏳ Formatting..." : "⏳"
-              : showLabels ? "🛠️ Tools ▾" : "🛠️ ▾"}
+              : showLabels ? "🛠️ Tools ▾" : "🛠️"}
           </button>
 
           {toolsOpen && (
@@ -111,7 +125,7 @@ export function Toolbar({
               />
               <div className="context-menu tools-menu">
                 <button onClick={toolsAction(onFormat)} disabled={busy}>
-                  ✨ Format code (clean indentation) — Ctrl+Shift+F
+                  ✨ Format code (clean indentation) — Ctrl+Shift+Alt+F
                 </button>
                 <button onClick={toolsAction(onScreenshot)}>
                   📸 Snapshot (Ctrl+Alt+S)
@@ -164,12 +178,8 @@ export function Toolbar({
             C Standard
           </span>
           <select
-            value={standard}
-            onChange={(e) => {
-              const s = e.target.value;
-              setStandard(s);
-              onStandardChange?.(s);
-            }}
+            value={standard.toUpperCase()}
+            onChange={(e) => onStandardChange?.(e.target.value)}
             title="C Standard (controls the -std flag when compiling)"
             aria-label="C Standard"
           >
