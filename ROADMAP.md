@@ -1,7 +1,7 @@
 # C-Shell — Roadmap & Build Plan
 
 **Purpose:** sequence the next moves so vibe-coding stays coherent and the critical bugs get fixed deliberately.
-**Current state:** v0.6.0 — complete IDE, 30+ features shipped, 3 critical security findings + a few moderate/minor fixes (see DEEP_REPORT.md).
+**Current state:** v0.6.0 — complete IDE, 30+ features shipped, 3 critical security findings + a few moderate/minor fixes (see AUDIT.md / PROMPTS_AUDIT.md).
 
 ---
 

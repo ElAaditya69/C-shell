@@ -216,6 +216,12 @@ export function useTabs() {
     );
   };
 
+  const updateTabCode = (tabId: string, value: string) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, code: value } : t))
+    );
+  };
+
   const writeAndUpdateTab = async (
     tab: OpenTab,
     filePath: string,
@@ -489,6 +495,7 @@ export function useTabs() {
     openFile,
     newFile,
     updateActiveCode,
+    updateTabCode,
     saveFile,
     saveFileAs,
     closeTab,

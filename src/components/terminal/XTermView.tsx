@@ -31,18 +31,29 @@ export const RUN_FINISHED_EVENT = "cshell:run-finished";
 const PASTE_CHUNK_SIZE = 512;
 const PASTE_CHUNK_DELAY_MS = 25;
 
+// Rate limit: while a paste's chunk queue is still flushing, further
+// paste events are ignored. Two concurrent chunk chains would interleave
+// at the pty and reorder bytes; the dropped paste is the cheaper loss.
+let pasteFlushing = false;
+
 async function sendPasteInChunks(text: string) {
-  for (let i = 0; i < text.length; i += PASTE_CHUNK_SIZE) {
-    const chunk = text.slice(i, i + PASTE_CHUNK_SIZE);
-    try {
-      await FileService.sendCommand(chunk);
-    } catch (err) {
-      console.error("Failed to send paste chunk:", err);
-      return; // abort on failure — don't send a partial paste past the error
+  if (pasteFlushing) return; // ignore new paste while one is flushing
+  pasteFlushing = true;
+  try {
+    for (let i = 0; i < text.length; i += PASTE_CHUNK_SIZE) {
+      const chunk = text.slice(i, i + PASTE_CHUNK_SIZE);
+      try {
+        await FileService.sendCommand(chunk);
+      } catch (err) {
+        console.error("Failed to send paste chunk:", err);
+        return; // abort on failure — don't send a partial paste past the error
+      }
+      if (i + PASTE_CHUNK_SIZE < text.length) {
+        await new Promise((r) => setTimeout(r, PASTE_CHUNK_DELAY_MS));
+      }
     }
-    if (i + PASTE_CHUNK_SIZE < text.length) {
-      await new Promise((r) => setTimeout(r, PASTE_CHUNK_DELAY_MS));
-    }
+  } finally {
+    pasteFlushing = false;
   }
 }
 

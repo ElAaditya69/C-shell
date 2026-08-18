@@ -127,6 +127,11 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onReorder }: TabB
           <div
             key={tab.id}
             className={`tab ${tab.id === activeTabId ? "active" : ""} ${isDragging ? "dragging" : ""}`}
+            draggable={true}
+            onDragStart={(e) => {
+              e.dataTransfer.setData("application/c-shell-tab", tab.id);
+              e.dataTransfer.setData("text/plain", tab.id);
+            }}
             onClick={() => {
               // A real drag fires click on release — don't treat it as a switch.
               if (isDragging || didDragRef.current) return;

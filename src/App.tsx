@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { CompileService, RunConfig } from './services/CompileService';
@@ -7,6 +7,7 @@ import { FileService } from './services/FileService';
 import { FormatService } from './services/FormatService';
 import { Editor, EditorHandle } from './components/editor/Editor';
 import { TabBar } from './components/editor/TabBar';
+import { PanesContainer, PaneState, PaneRefs } from './components/editor/PanesContainer';
 import { QuickOpen } from './components/editor/QuickOpen';
 import { WelcomeScreen } from './components/common/WelcomeScreen';
 import { TerminalPanel, TerminalPanelHandle } from './components/terminal/TerminalPanel';
@@ -36,7 +37,13 @@ function App() {
   const [snippetsModalVisible, setSnippetsModalVisible] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
-  const [splitView, setSplitView] = useState(false);
+  // Multi-pane editing: each pane shows ITS OWN tab (different files side by
+  // side). Empty array = classic single-editor layout. When the last pane is
+  // closed, fall back to the classic layout (panes become []).
+  const [panes, setPanes] = useState<PaneState[]>([]);
+  // The pane the user last interacted with (click, type, tab select, focus
+  // key). Drives: tab-click loading, Ctrl+1/2 focus, status-bar cursor.
+  const [activePaneId, setActivePaneId] = useState(1);
   // useSettings must run before any state initialized from settings —
   // its destructured consts are referenced during render.
   const { settings, isSettingsLoaded, updateSettings } = useSettings();
@@ -51,7 +58,7 @@ function App() {
     col: 1,
   });
   const editorRef = useRef<EditorHandle>(null);
-  const splitEditorRef = useRef<EditorHandle>(null);
+  const paneRefs = useRef<PaneRefs>({});
   const terminalRef = useRef<TerminalPanelHandle>(null);
 
   const {
@@ -62,6 +69,7 @@ function App() {
     openFile,
     newFile,
     updateActiveCode,
+    updateTabCode,
     saveFile,
     saveFileAs,
     closeTab,
@@ -74,6 +82,8 @@ function App() {
     exportCrashBackup,
     importCrashBackup,
   } = useTabs();
+
+  const tabsById = useMemo(() => new Map(tabs.map((t) => [t.id, t])), [tabs]);
 
   const {
     files,
@@ -357,10 +367,118 @@ function App() {
     setZenMode(false);
   };
 
-  /* Toggle Split Editor View */
+  /* Toggle Split Editor View: splits into independent multi-panes. */
   const toggleSplitView = () => {
-    setSplitView((v) => !v);
+    setPanes((prev) => {
+      if (prev.length <= 1) {
+        // Classic / single -> split into 2 panes:
+        // Pane 1 keeps the active tab, pane 2 starts with another open tab or empty.
+        const currentTabId = activeTabId ?? tabs[0]?.id ?? null;
+        const otherTab = tabs.find((t) => t.id !== currentTabId);
+        const p1: PaneState = { id: 1, tabId: currentTabId };
+        const p2: PaneState = { id: 2, tabId: otherTab?.id ?? null };
+        setActivePaneId(2);
+        if (otherTab) {
+          setActiveTabId(otherTab.id);
+        }
+        return [p1, p2];
+      }
+      // Split -> un-split the focused pane to return to classic single-editor
+      const target = prev.find((p) => p.id === activePaneId) ?? prev[0];
+      const remaining = prev.find((p) => p.id !== target.id) ?? prev[0];
+      if (remaining?.tabId) {
+        setActiveTabId(remaining.tabId);
+      } else if (target.tabId) {
+        setActiveTabId(target.tabId);
+      }
+      setActivePaneId(1);
+      return [];
+    });
   };
+
+  /** Close a pane. Closing one of 2 panes returns to classic single-editor layout. */
+  const closePane = (paneId: number) => {
+    setPanes((prev) => {
+      if (prev.length <= 2) {
+        const remaining = prev.find((p) => p.id !== paneId);
+        if (remaining?.tabId) {
+          setActiveTabId(remaining.tabId);
+        }
+        setActivePaneId(1);
+        return [];
+      }
+      const rest = prev.filter((p) => p.id !== paneId);
+      if (!rest.some((p) => p.id === activePaneId)) {
+        setActivePaneId(rest[0].id);
+        if (rest[0].tabId) setActiveTabId(rest[0].tabId);
+      }
+      return rest;
+    });
+  };
+
+  /** Focus a pane and activate its tab */
+  const handleFocusPane = (paneId: number) => {
+    setActivePaneId(paneId);
+    const pane = panes.find((p) => p.id === paneId);
+    if (pane?.tabId) {
+      setActiveTabId(pane.tabId);
+    }
+  };
+
+  /** Select a tab from the shared TabBar */
+  const handleSelectTab = (id: string) => {
+    setActiveTabId(id);
+    if (panes.length > 1) {
+      const existing = panes.find((p) => p.tabId === id);
+      if (existing) {
+        setActivePaneId(existing.id);
+      } else {
+        setPanes((prev) =>
+          prev.map((p) => (p.id === activePaneId ? { ...p, tabId: id } : p))
+        );
+      }
+    }
+  };
+
+  /** Close a tab */
+  const handleCloseTab = (id: string) => {
+    closeTab(id);
+    if (panes.length > 1) {
+      setPanes((prev) =>
+        prev.map((p) => (p.tabId === id ? { ...p, tabId: null } : p))
+      );
+    }
+  };
+
+  /** Open a file via dialog in a specific pane */
+  const handleOpenFileInPane = async (paneId: number) => {
+    setActivePaneId(paneId);
+    const file = await openFileDialog();
+    if (!file) return;
+    await openFile(file);
+    setPanes((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.map((p) => (p.id === paneId ? { ...p, tabId: file } : p));
+    });
+  };
+
+  /** Drop a tab onto a pane */
+  const handlePaneDrop = (paneId: number, tabId?: string) => {
+    if (!tabId) return;
+    setActivePaneId(paneId);
+    setActiveTabId(tabId);
+    setPanes((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.map((p) => (p.id === paneId ? { ...p, tabId } : p));
+    });
+  };
+
+  /** Helper to get active Editor handle */
+  const getActiveEditor = () =>
+    (panes.length > 1 ? paneRefs.current[activePaneId] : editorRef.current) ??
+    editorRef.current ??
+    Object.values(paneRefs.current)[0] ??
+    null;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -463,12 +581,23 @@ function App() {
       if (mod && e.shiftKey && key === 'o') {
         e.preventDefault();
         e.stopPropagation();
-        editorRef.current?.openSymbolPicker();
+        getActiveEditor()?.openSymbolPicker();
         return;
       }
       if (mod && !e.shiftKey && key === 'o') {
         e.preventDefault();
         handleOpenFolder();
+        return;
+      }
+      /* Focus pane by index: Ctrl+1 / Ctrl+2 */
+      if (mod && (key === '1' || key === '2')) {
+        e.preventDefault();
+        const targetId = key === '1' ? 1 : 2;
+        if (panes.length > 1) {
+          handleFocusPane(targetId);
+        } else if (key === '2') {
+          toggleSplitView();
+        }
         return;
       }
       if (mod && e.shiftKey && key === 'p') {
@@ -489,7 +618,7 @@ function App() {
       if (mod && key === '/') {
         e.preventDefault();
         e.stopPropagation();
-        editorRef.current?.toggleComment();
+        getActiveEditor()?.toggleComment();
         return;
       }
       /* Toggle Terminal: Ctrl+` */
@@ -501,13 +630,13 @@ function App() {
       /* Toggle line bookmark: Ctrl+F2 */
       if (mod && key === 'f2') {
         e.preventDefault();
-        editorRef.current?.toggleBookmark();
+        getActiveEditor()?.toggleBookmark();
         return;
       }
       /* Jump to next bookmark: F2 */
       if (!mod && key === 'f2') {
         e.preventDefault();
-        editorRef.current?.nextBookmark();
+        getActiveEditor()?.nextBookmark();
         return;
       }
       /* Help / Shortcuts: Ctrl+Shift+H — opens the same shortcuts list the
@@ -522,7 +651,7 @@ function App() {
     // newline, and comment/symbol shortcuts must have one owner only.
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [tabs, activeTab, activeTabId, quickOpenVisible, zenMode, presentationMode]);
+  }, [tabs, activeTab, activeTabId, quickOpenVisible, zenMode, presentationMode, panes, activePaneId]);
 
   const handleSelectDiagnostic = (diag: { file: string; line: number; col: number }) => {
     // diag.file may be a full path (normal gcc lines) or a bare word
@@ -533,14 +662,19 @@ function App() {
     );
     if (matchingTab) {
       setActiveTabId(matchingTab.id);
+      // Jump in the pane that shows the file (fallback: active pane).
+      const pane = panes.find((p) => p.tabId === matchingTab.id);
+      if (pane) {
+        setActivePaneId(pane.id);
+      }
     }
     setTimeout(() => {
-      editorRef.current?.jumpToPosition(diag.line, diag.col);
+      getActiveEditor()?.jumpToPosition(diag.line, diag.col);
     }, 50);
   };
 
   const handleInsertSnippet = (text: string) => {
-    editorRef.current?.insertText(text);
+    getActiveEditor()?.insertText(text);
   };
 
   const commandActions: CommandAction[] = [
@@ -554,16 +688,18 @@ function App() {
     { id: 'snapshot', label: '📸 Code Snapshot', category: 'Tools', shortcut: 'Ctrl+Alt+S', perform: () => setScreenshotModalVisible(true) },
     { id: 'report', label: '📄 Lab Report', category: 'Tools', shortcut: 'Ctrl+Alt+R', perform: () => setReportModalVisible(true) },
     { id: 'settings', label: '⚙️ Preferences', category: 'General', shortcut: 'Ctrl+,', perform: () => setSettingsModalVisible(true) },
-    { id: 'toggle-comment', label: '💬 Toggle Line Comment', category: 'Edit', shortcut: 'Ctrl+/', perform: () => editorRef.current?.toggleComment() },
-    { id: 'toggle-block-comment', label: '💬 Toggle Block Comment', category: 'Edit', shortcut: 'Shift+Alt+A', perform: () => editorRef.current?.toggleBlockComment() },
+    { id: 'toggle-comment', label: '💬 Toggle Line Comment', category: 'Edit', shortcut: 'Ctrl+/', perform: () => getActiveEditor()?.toggleComment() },
+    { id: 'toggle-block-comment', label: '💬 Toggle Block Comment', category: 'Edit', shortcut: 'Shift+Alt+A', perform: () => getActiveEditor()?.toggleBlockComment() },
     { id: 'search-files', label: '🔍 Search & Replace in Workspace', category: 'Navigation', shortcut: 'Ctrl+Shift+F', perform: () => setSearchModalVisible(true) },
     { id: 'clean-build', label: '🧹 Clean Build Artifacts', category: 'Build', perform: () => CompileService.cleanBuild() },
     { id: 'rebuild', label: '🔄 Rebuild Workspace', category: 'Build', perform: buildCode },
-    { id: 'toggle-bookmark', label: '🔖 Toggle Line Bookmark', category: 'Navigation', shortcut: 'Ctrl+F2', perform: () => editorRef.current?.toggleBookmark() },
-    { id: 'next-bookmark', label: '🔖 Jump to Next Bookmark', category: 'Navigation', shortcut: 'F2', perform: () => editorRef.current?.nextBookmark() },
+    { id: 'toggle-bookmark', label: '🔖 Toggle Line Bookmark', category: 'Navigation', shortcut: 'Ctrl+F2', perform: () => getActiveEditor()?.toggleBookmark() },
+    { id: 'next-bookmark', label: '🔖 Jump to Next Bookmark', category: 'Navigation', shortcut: 'F2', perform: () => getActiveEditor()?.nextBookmark() },
     { id: 'zen-mode', label: '🧘 Zen Mode', category: 'View', shortcut: 'Ctrl+K Z', perform: toggleZenMode },
     { id: 'presentation-mode', label: '🎬 Presentation Mode', category: 'View', perform: togglePresentationMode },
     { id: 'split-editor', label: '🪟 Toggle Split Editor', category: 'View', perform: toggleSplitView },
+    { id: 'focus-pane-1', label: '🪟 Focus Editor Pane 1', category: 'View', shortcut: 'Ctrl+1', perform: () => handleFocusPane(1) },
+    { id: 'focus-pane-2', label: '🪟 Focus Editor Pane 2', category: 'View', shortcut: 'Ctrl+2', perform: () => (panes.length > 1 ? handleFocusPane(2) : toggleSplitView()) },
     { id: 'snippets', label: '✂️ Insert Snippet', category: 'Edit', perform: () => setSnippetsModalVisible(true) },
     { id: 'help-shortcuts', label: '❓ Keyboard Shortcuts & Help', category: 'General', shortcut: 'Ctrl+Shift+H', perform: () => setCommandPaletteVisible(true) },
   ];
@@ -731,7 +867,7 @@ function App() {
               onOpenSettings={() => setSettingsModalVisible(true)}
               onToggleTerminal={() => terminalRef.current?.toggle()}
               onToggleSplitView={toggleSplitView}
-              isSplitView={splitView}
+              isSplitView={panes.length > 1}
               activityState={activityState}
               standard={cStandard}
               onStandardChange={(s) => setCStandard(s.toLowerCase())}
@@ -742,42 +878,32 @@ function App() {
             <TabBar
               tabs={tabs}
               activeTabId={activeTabId}
-              onSelect={setActiveTabId}
-              onClose={closeTab}
+              onSelect={handleSelectTab}
+              onClose={handleCloseTab}
               onReorder={reorderTabs}
             />
 
-            {activeTab ? (
-              splitView ? (
-                <div className="split-editor-container">
-                  <div className="split-pane">
-                    <Editor
-                      ref={editorRef}
-                      code={activeTab.code}
-                      fileName={activeTab.name}
-                      onChange={updateActiveCode}
-                      onCursorChange={setCursorPos}
-                    />
-                  </div>
-                  <div className="split-divider" />
-                  <div className="split-pane">
-                    <Editor
-                      ref={splitEditorRef}
-                      code={activeTab.code}
-                      fileName={activeTab.name}
-                      onChange={updateActiveCode}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <Editor
-                  ref={editorRef}
-                  code={activeTab.code}
-                  fileName={activeTab.name}
-                  onChange={updateActiveCode}
-                  onCursorChange={setCursorPos}
-                />
-              )
+            {panes.length > 1 ? (
+              <PanesContainer
+                ref={paneRefs}
+                panes={panes}
+                tabsById={tabsById}
+                activePaneId={activePaneId}
+                onFocusPane={handleFocusPane}
+                onClosePane={closePane}
+                onOpenFileInPane={handleOpenFileInPane}
+                onPaneDrop={handlePaneDrop}
+                onChangeCode={updateTabCode}
+                onCursorChange={setCursorPos}
+              />
+            ) : activeTab ? (
+              <Editor
+                ref={editorRef}
+                code={activeTab.code}
+                fileName={activeTab.name}
+                onChange={updateActiveCode}
+                onCursorChange={setCursorPos}
+              />
             ) : (
               <WelcomeScreen
                 onNewFile={newFile}

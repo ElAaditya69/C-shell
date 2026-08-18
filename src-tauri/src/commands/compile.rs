@@ -287,25 +287,84 @@ struct BuildOutcome {
     binary_name: &'static str,
 }
 
-/// Recursively collects every `.c` file under `root` (excluding the build
-/// temp dir), sorted for a deterministic compile order. Includes .c only —
-/// .h headers are pulled in via -I, never listed on the command line.
-fn collect_folder_sources(root: &Path, exclude: &Path) -> Vec<PathBuf> {
+/// Emits the diagnostics payload for the CURRENT run. Called with an empty
+/// Vec at the very start of every build (and by clean_build) so the UI's
+/// diagnostics state always reflects the current run — a stale list from a
+/// previous program can never survive into a fresh one.
+fn emit_diagnostics(app: &AppHandle, diagnostics: Vec<Diagnostic>) {
+    let _ = app.emit("compiler-diagnostics", diagnostics);
+}
+
+/// Directory segments that are never project C sources: generated output,
+/// vendored deps, VCS internals, and the build temp dir itself. Matched
+/// against each path component, so a `.c` nested under `build/`, `dist/`,
+/// `node_modules/`, `target/`, `.git/`, `examples/` or `tests/` anywhere in
+/// the tree is skipped (e.g. `src/examples/legacy.c` from a template repo).
+fn is_excluded_dir(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "build" | "dist" | "node_modules" | "target" | ".git" | "examples" | "tests" | "test"
+    ) || lower.starts_with("build")
+        || lower.starts_with("dist")
+        || lower.ends_with(".tmp")
+}
+
+/// Recursively collects the `.c` files that belong to the project rooted at
+/// `root`, given the active file's own directory (`active_dir`, which may
+/// itself lie below `root`).
+///
+/// Scope rules:
+/// 1. Only the active file's own subtree is compiled — a folder loaded at
+///    the repo root must not pull in unrelated programs sitting in sibling
+///    folders or at the root itself (each with their own main() and their
+///    own warnings). `root` merely anchors the traversal so the walk can
+///    never escape the workspace.
+/// 2. When the active file is not inside the workspace, no workspace sources
+///    are collected at all — the single-file path compiles just that file.
+/// 3. Directories named `build`, `dist`, `node_modules`, `target`, `.git`,
+///    `examples`, `tests`/`test` (and `build*`/`dist*` prefixes) are skipped
+///    entirely; their sources are never examples of "the program".
+/// 4. `exclude` (the build temp dir) is never descended into.
+/// 5. Symlinks are never followed — neither a symlinked directory (its
+///    target may live outside the workspace entirely) nor a symlinked .c
+///    file. The walk's read_dir only lists entries; deciding via
+///    `file_type()` (the entry itself, not its target) keeps every
+///    compiled path inside the workspace.
+///
+/// `.h` headers are pulled in via -I, never listed on the command line.
+fn collect_folder_sources(root: &Path, active_dir: &Path, exclude: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
+    let mut stack = vec![active_dir.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        if dir == exclude {
+        // Never escape the workspace, never touch the build temp dir.
+        if dir == exclude || !dir.starts_with(root) {
             continue;
         }
         let Ok(entries) = fs::read_dir(&dir) else { continue };
         for entry in entries.flatten() {
+            // The entry's own file type (lstat semantics): a symlink is a
+            // symlink even when its target is a dir or a .c file.
+            let Ok(ftype) = entry.file_type() else { continue };
+            if ftype.is_symlink() {
+                continue;
+            }
             let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path
-                .extension()
-                .map(|e| e.eq_ignore_ascii_case("c"))
-                .unwrap_or(false)
+            if ftype.is_dir() {
+                // Skip excluded dirs outright — don't descend into them.
+                let name = path.file_name().map(|n| n.to_string_lossy().to_string());
+                let excluded = name
+                    .as_deref()
+                    .map(is_excluded_dir)
+                    .unwrap_or(false);
+                if !excluded {
+                    stack.push(path);
+                }
+            } else if ftype.is_file()
+                && path
+                    .extension()
+                    .map(|e| e.eq_ignore_ascii_case("c"))
+                    .unwrap_or(false)
             {
                 out.push(path);
             }
@@ -364,8 +423,19 @@ fn build(
     standard: Option<String>,
     workspace_dir: Option<String>,
 ) -> Result<BuildOutcome, String> {
-    let dir = temp_dir();
+    // First thing: clear any diagnostics the UI may still hold from an
+    // earlier run. If gcc fails to spawn, the write fails, or the terminal
+    // isn't up yet, this empty payload is what the UI must show — never the
+    // previous program's stale warnings. The real payload (empty or not) is
+    // emitted again after gcc exits.
+    emit_diagnostics(app, Vec::new());
+
+    let mut dir = temp_dir();
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // Resolve symlinks (/tmp → /private/tmp on macOS) so temp paths compare
+    // equal to the canonicalized workspace paths below; otherwise the
+    // exclude/contains checks silently miss.
+    dir = fs::canonicalize(&dir).unwrap_or(dir);
     let std_flag = standard
         .map(|s| standard_flag(&s))
         .unwrap_or_else(|| "c99".to_string());
@@ -389,7 +459,13 @@ fn build(
     let _ = fs::remove_file(&binary_path);
 
     // Folder mode: workspace root resolves, exists, and holds at least one
-    // other .c file — otherwise fall back to single-file.
+    // other .c file — otherwise fall back to single-file. When the active
+    // file lives in the workspace, the real file (not the temp copy) is what
+    // gcc compiles; the temp copy is only written as a fallback and removed
+    // either way once the build is done.
+    let active_dir = Path::new(filename)
+        .parent()
+        .and_then(|p| fs::canonicalize(p).ok());
     let folder_mode = workspace_dir
         .as_deref()
         .filter(|w| !w.trim().is_empty())
@@ -397,17 +473,30 @@ fn build(
         .filter(|w| w.is_dir())
         .filter(|w| w != &dir)
         .filter(|w| {
-            collect_folder_sources(w, &dir)
+            let active = active_dir.as_deref().unwrap_or(w);
+            collect_folder_sources(w, active, &dir)
                 .iter()
                 .any(|s| s != &file_path)
         });
     let mut sources = vec![file_path.clone()];
     if let Some(w) = &folder_mode {
-        sources = collect_folder_sources(w, &dir);
+        let real_file = Path::new(filename).canonicalize().ok();
+        sources = collect_folder_sources(w, active_dir.as_deref().unwrap_or(w), &dir);
         if !sources.contains(&file_path) {
             sources.push(file_path.clone());
         }
         sources.sort();
+        if let Some(real) = &real_file {
+            // Compile the on-disk source instead of the temp copy so the
+            // diagnostics line numbers point at the real file, and a stale
+            // temp copy from an earlier session can never be recompiled.
+            let real_in_workspace = sources
+                .iter()
+                .any(|s| s == real);
+            if real_in_workspace {
+                sources.retain(|s| s != &file_path);
+            }
+        }
     }
     let workspace_arg = folder_mode.as_ref().map(|p| p.as_path());
 
@@ -438,7 +527,10 @@ fn build(
     let stderr = String::from_utf8_lossy(&compile_output.stderr);
     let success = compile_output.status.success();
     let diagnostics = parse_gcc_diagnostics(&stderr);
-    let _ = app.emit("compiler-diagnostics", diagnostics);
+    // The UI's diagnostics state must match THIS run exactly: an empty
+    // payload clears the PROBLEMS list just as a payload with entries fills
+    // it — never omit the event, or stale entries survive.
+    emit_diagnostics(app, diagnostics);
 
     if !success {
         emit("\x1b[31m❌ COMPILATION ERROR:\x1b[0m\r\n".to_string());
@@ -455,6 +547,10 @@ fn build(
             emit("\r\n".to_string());
         }
         emit(format!("✅ Compiled in {:.2}s\r\n", elapsed.as_secs_f32()));
+        // Don't leave the source behind either — a later run must never be
+        // able to pick up this file's stale state. The binary was already
+        // cleaned by the run line / next build.
+        let _ = fs::remove_file(&file_path);
     }
 
     Ok(BuildOutcome {
@@ -486,6 +582,10 @@ pub fn build_only(
     standard: Option<String>,
     workspace_dir: Option<String>,
 ) -> Result<(), String> {
+    // Clear diagnostics before the (fallible) terminal wait — a "Terminal
+    // not started" error must never leave the previous run's problems on
+    // screen.
+    emit_diagnostics(&app, Vec::new());
     wait_terminal_ready()?;
     build(&app, &code, &filename, standard, workspace_dir)?;
     Ok(())
@@ -568,6 +668,10 @@ pub fn compile_and_run(
     config: Option<RunConfig>,
     workspace_dir: Option<String>,
 ) -> Result<(), String> {
+    // Clear diagnostics before the (fallible) terminal wait — a "Terminal
+    // not started" error must never leave the previous run's problems on
+    // screen.
+    emit_diagnostics(&app, Vec::new());
     wait_terminal_ready()?;
     let outcome = build(&app, &code, &filename, standard, workspace_dir)?;
 
@@ -657,6 +761,8 @@ pub fn compile_and_run(
 
 #[command]
 pub fn clean_build(app: AppHandle) -> Result<(), String> {
+    // Clean the artifacts AND any stale diagnostics the UI still holds.
+    emit_diagnostics(&app, Vec::new());
     let dir = temp_dir();
     if dir.exists() {
         let _ = fs::remove_dir_all(&dir);
@@ -825,12 +931,138 @@ mod tests {
         fs::write(root.join("sub/extra.c"), "int extra(void) { return 2; }\n").unwrap();
         fs::write(root.join("notes.txt"), "not a source\n").unwrap();
 
-        let srcs = collect_folder_sources(&root, &temp_dir());
+        // Active file in the root: whole project tree is in scope.
+        let srcs = collect_folder_sources(&root, &root, &temp_dir());
         let rel: Vec<String> = srcs
             .iter()
             .map(|s| s.strip_prefix(&root).unwrap().to_string_lossy().to_string())
             .collect();
         assert_eq!(rel, vec!["main.c", "sub/extra.c", "utils.c"]);
+    }
+
+    #[test]
+    fn folder_sources_scoped_to_active_file_subtree() {
+        // Active file lives in `sub` → only sub/ sources are compiled; the
+        // sibling program at the root must not be pulled in (it has its own
+        // main() and would only contribute duplicate symbols / foreign
+        // warnings).
+        let root = temp_dir().join("scope_test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::create_dir_all(root.join("sibling")).unwrap();
+        fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
+        fs::write(root.join("sub/other.c"), "int other(void) { return 1; }\n").unwrap();
+        fs::write(root.join("sibling/unrelated.c"), "int unrelated(void) { return 2; }\n").unwrap();
+
+        let active_dir = root.join("sub");
+        let srcs = collect_folder_sources(&root, &active_dir, &temp_dir());
+        let rel: Vec<String> = srcs
+            .iter()
+            .map(|s| s.strip_prefix(&root).unwrap().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(rel, vec!["sub/other.c"]);
+    }
+
+    #[test]
+    fn folder_sources_excludes_build_dist_node_modules_and_examples() {
+        let root = temp_dir().join("exclude_test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("build")).unwrap();
+        fs::create_dir_all(root.join("dist")).unwrap();
+        fs::create_dir_all(root.join("node_modules/lib")).unwrap();
+        fs::create_dir_all(root.join("examples")).unwrap();
+        fs::create_dir_all(root.join("tests")).unwrap();
+        fs::create_dir_all(root.join("src/examples")).unwrap();
+        fs::create_dir_all(root.join("src/build_vendor")).unwrap();
+        fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
+        fs::write(root.join("build/generated.c"), "int gen(void) { return 1; }\n").unwrap();
+        fs::write(root.join("dist/bundle.c"), "int bundle(void) { return 2; }\n").unwrap();
+        fs::write(root.join("node_modules/lib/legacy.c"), "int legacy(void) { return 3; }\n").unwrap();
+        fs::write(root.join("examples/hello.c"), "int hello(void) { return 4; }\n").unwrap();
+        fs::write(root.join("tests/test_main.c"), "int test(void) { return 5; }\n").unwrap();
+        fs::write(root.join("src/examples/legacy.c"), "int legacy2(void) { return 6; }\n").unwrap();
+        fs::write(root.join("src/build_vendor/dep.c"), "int dep(void) { return 7; }\n").unwrap();
+        fs::write(root.join("src/real.c"), "int real(void) { return 8; }\n").unwrap();
+
+        let srcs = collect_folder_sources(&root, &root, &temp_dir());
+        let rel: Vec<String> = srcs
+            .iter()
+            .map(|s| s.strip_prefix(&root).unwrap().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(rel, vec!["main.c", "src/real.c"]);
+    }
+
+    #[test]
+    fn folder_sources_never_follows_symlinks() {
+        // A symlinked subdir or .c file must not escape the workspace: the
+        // walk decides on the entry's own file type (lstat), never on what
+        // the symlink points to.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+
+            let root = temp_dir().join("symlink_test");
+            let _ = fs::remove_dir_all(&root);
+            fs::create_dir_all(&root).unwrap();
+            fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
+            fs::write(root.join("real.c"), "int real(void) { return 1; }\n").unwrap();
+
+            // Outside dir holding files a naive walk would pull in.
+            let outside = temp_dir().join("symlink_outside");
+            let _ = fs::remove_dir_all(&outside);
+            fs::create_dir_all(&outside).unwrap();
+            fs::write(outside.join("escaped.c"), "int escaped(void) { return 2; }\n").unwrap();
+
+            symlink(&outside, root.join("linked_dir")).unwrap();
+            symlink(outside.join("escaped.c"), root.join("linked_file.c")).unwrap();
+
+            let srcs = collect_folder_sources(&root, &root, &temp_dir());
+            let rel: Vec<String> = srcs
+                .iter()
+                .map(|s| s.strip_prefix(&root).unwrap().to_string_lossy().to_string())
+                .collect();
+            assert_eq!(rel, vec!["main.c", "real.c"]);
+        }
+        // On non-Unix there is nothing to assert; the function itself is
+        // platform-independent.
+    }
+
+    #[test]
+    fn run_config_arg_with_quote_and_space_round_trips() {
+        // shell_quote wraps the arg in single quotes and escapes inner
+        // quotes as '\'' — a value with BOTH a single quote AND a space
+        // ("it's fine") must survive as ONE literal argv word. Verified by
+        // echoing the run line through sh and reading back the argv.
+        let arg = "it's fine";
+        let line = posix_run_line(
+            "/tmp/c-shell",
+            "./program",
+            &[arg.to_string()],
+            None,
+            RUN_DONE_MARKER,
+        );
+        assert!(line.contains("'it'\\''s fine'"), "got: {}", line);
+
+        // End-to-end: sh must hand the program exactly one argv word.
+        #[cfg(unix)]
+        {
+            let probe = format!("printf '<%s>\\n' {}", shell_quote(arg));
+            let out = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&probe)
+                .output()
+                .expect("sh runs");
+            assert!(
+                out.status.success(),
+                "sh probe failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&out.stdout),
+                "<it's fine>\n",
+                "quoted arg must survive sh as one word"
+            );
+        }
     }
 
     #[test]
@@ -858,7 +1090,7 @@ mod tests {
         )
         .unwrap();
 
-        let srcs = collect_folder_sources(&root, &temp_dir());
+        let srcs = collect_folder_sources(&root, &root, &temp_dir());
         let bin = temp_dir().join("proj_test_program");
         let mut cmd = gcc_command(&srcs, &bin, "c99", Some(&root));
         let out = cmd.output().expect("gcc runs");

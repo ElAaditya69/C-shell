@@ -32,6 +32,7 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
   const [mode, setMode] = useState<Mode>("normal");
   const [started, setStarted] = useState(false);
   const [activeTab, setActiveTab] = useState<PanelTab>("terminal");
+  const [unreadDiag, setUnreadDiag] = useState(false);
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const draggingRef = useRef(false);
   const heightRef = useRef(height);
@@ -40,6 +41,8 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const startedRef = useRef(false);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
 
   const showTerminal = useCallback(() => {
     startedRef.current = true;
@@ -88,10 +91,27 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
     let unlisten: (() => void) | undefined;
     (async () => {
       unlisten = await listen<Diagnostic[]>("compiler-diagnostics", (e) => {
-        setDiagnostics(e.payload || []);
-        if (e.payload && e.payload.length > 0) {
+        const payload = e.payload || [];
+        // Every event is the CURRENT run's full state — an empty payload
+        // from a clean build clears the list, never leaves stale entries
+        // behind from a previous program.
+        setDiagnostics(payload);
+        // Only ERRORS steal focus: auto-switch to PROBLEMS + expand the
+        // terminal when the build actually failed. Warnings on a program
+        // that compiled update the count badge but never yank the editor.
+        const hasErrors = payload.some((d) => d.is_error);
+        if (hasErrors) {
           setActiveTab("problems");
           showTerminal();
+          // An error pop is itself a "seen" diagnostic — don't dot the tab.
+          setUnreadDiag(false);
+        } else if (payload.length > 0) {
+          // New diagnostics arrived while the user stays on the terminal
+          // tab: mark the problems tab with a subtle dot (cleared when it
+          // is opened, or on the next run's payload).
+          if (activeTabRef.current === "terminal") {
+            setUnreadDiag(true);
+          }
         }
       });
     })();
@@ -176,15 +196,32 @@ export const TerminalPanel = forwardRef<TerminalPanelHandle, TerminalPanelProps>
             onClick={(e) => {
               e.stopPropagation();
               setActiveTab("problems");
+              setUnreadDiag(false);
             }}
             style={{
               cursor: "pointer",
               opacity: activeTab === "problems" ? 1 : 0.6,
               borderBottom: activeTab === "problems" ? "2px solid var(--accent)" : "none",
               paddingBottom: "2px",
+              position: "relative",
             }}
           >
             ⚠️ PROBLEMS {diagnostics.length > 0 && `(${diagnostics.length})`}
+            {unreadDiag && activeTab !== "problems" && (
+              <span
+                title="New diagnostics"
+                style={{
+                  position: "absolute",
+                  top: "-2px",
+                  right: "-8px",
+                  width: "6px",
+                  height: "6px",
+                  borderRadius: "50%",
+                  background: "var(--accent)",
+                  opacity: 0.8,
+                }}
+              />
+            )}
           </span>
         </div>
 

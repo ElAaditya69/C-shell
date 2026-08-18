@@ -416,3 +416,180 @@ then stop. Do not push, do not tag, do not open a release. Report the
 commit hash and the final git status.
 ```
 Gate: `git status` clean except untracked report docs the user wants kept; commit contains exactly the audit-fix work; NO tag/release/push created.
+---
+
+# BATCH 7 — Post-commit repairs: warnings on every program, security pass, polish, Vivaldi-style splits (2026-08-18)
+
+> Already shipped since Batch 6: commit `4465b38` (clean F1–F5, V1–V3, C1–C2, C4-lite, bookmarks, run config, layout/theme hardening) — see git log.
+> Run from `~/Desktop/c-shell/c-shell`. Order matters — P18 (the warning bug) FIRST, then security, polish, and the big feature last (P21). Check each gate before moving on.
+> After ALL pass, run the "Final: commit & push" section verbatim LAST.
+
+### Prompt 18 — False "warnings" on every compile (the reported bug)
+```
+c-shell: Stop showing warnings/errors for programs that compile clean.
+
+The terminal PROBLEMS panel is showing warnings (sometimes errors) for
+every program, even correct ones. Cause is in src-tauri/src/commands/compile.rs build():
+
+1. For SINGLE-FILE builds, the source is written to the temp dir
+   (/tmp/c-shell/<safe-name>.c) EVERY run, but gcc is invoked on the same
+   path and the temp dir is NEVER cleaned on success (only the binary is
+   removed; on error only the .c is removed). The diagnostics are parsed
+   from stderr — so a warning that happened in an EARLIER program would
+   not survive. BUT: compile_and_run emits the stderr when !success and
+   when stderr is non-empty, and TerminalPanel AUTOMATICALLY switches to
+   PROBLEMS + shows the panel whenever "compiler-diagnostics" carries any
+   payload — even when everything compiled clean. That auto-switch + the
+   previous run's stale diagnostics (state in TerminalPanel is never
+   cleared on a fresh build) is the visible bug.
+
+2. For FOLDER (multi-file) builds, collect_folder_sources() walks the
+   WHOLE workspace and compiles EVERY .c under it — including example,
+   test, or leftover files with their own warnings — so any one file's
+   warning shows up as "the program" warning.
+
+Fix both:
+1. Clear the diagnostics state at the START of every compile: in
+   TerminalPanel's "compiler-diagnostics" listener, RESET the list to []
+   (or emit an empty list from compile.rs right before emitting the real
+   one) so stale warnings from the previous run never appear.
+2. build() must also clear on failure-of-a-new-run and when the new run
+   has zero diagnostics — emit an EMPTY "compiler-diagnostics" event (not
+   skip it) at the very start of every build, so the UI always reflects
+   the current run.
+3. Only auto-switch to PROBLEMS + expand the panel when diagnostics are
+   ERRORS (is_error === true). Warnings should show a count badge but NOT
+   steal focus from the editor — and definitely never expand the terminal
+   for warnings on a program that compiled.
+4. In build(), only emit "⚠️ COMPILER WARNINGS" when the CURRENT run's
+   stderr is non-empty (already true) AND make sure the temp source file
+   from the previous run can't be recompiled by stale state: on success
+   also remove the source .c from the temp dir (not just the binary).
+5. Folder mode: exclude a denylist of non-project files from
+   collect_folder_sources (e.g. files matching **/build/**, **/dist/**,
+   **/node_modules/**, *.tmp) and only compile sources under the
+   workspace that are actually reachable from the active file (i.e. .c
+   files that are #included or in the same directory tree) — at minimum
+   exclude **/example*/**, **/test*/, **/build*, **/dist*.
+Run cargo test (parse_gcc_diagnostics tests must stay green) + npm run
+build. Gate: compile a clean hello.c → terminal shows "✅ Compiled", the
+PROBLEMS tab has zero entries and does NOT pop open; introduce a real
+warning → it appears exactly once, focused on that file's line.
+```
+
+### Prompt 19 — Security & correctness hardening (the "check vulnerabilities" pass)
+```
+c-shell: Security pass — close the remaining real gaps. No scope creep.
+
+1. XTermView paste: Ctrl+Shift+V reads the clipboard and sendCommand()s it
+   raw (src/components/terminal/XTermView.tsx). A multi-KB paste blocks the
+   pty writer lock for seconds and can wedge the whole app. Fix: for
+   pastes >512 chars, chunk at the FRONTEND into ≤512-char pieces and
+   send each with a 25ms gap (setTimeout chain); keep byte order. Also
+   rate-limit: ignore further paste events while a chunk queue is
+   flushing. Run cargo check.
+2. SettingsContext userCss: custom user CSS is injected as raw <style>
+   text (self-XSS surface, though low risk — it's the user's own config).
+   No change needed now; verify nothing else treats userCss as trusted
+   executable content.
+3. compile.rs folder mode: workspace_dir is canonicalized and validated to
+   be a real dir ≠ temp dir before use — confirm no symlink-escape from
+   the workspace root through collect_folder_sources (it follows
+   read_dir, which does NOT follow symlinks, so a symlinked subdir is
+   returned as a dir and walked — make it skip symlinks:
+   file_type().is_symlink() continue, both for dirs and .c files).
+4. RunConfig cwd + args: shell_quote() wraps every arg in single quotes —
+   verify a config with args containing both a single quote AND a space
+   (e.g. "it's fine") round-trips through posix_run_line correctly; if
+   the shell_quote test for it is missing, add one. Run cargo test.
+5. tauri.conf.json CSP: confirm connect-src still permits only self/ipc/
+   ipc.localhost and that no 'unsafe-eval' was added for any of the new
+   deps. Report the CSP line verbatim.
+Run cargo test + npm run build. Gate: all above implemented + tests green.
+```
+
+### Prompt 20 — Polish pass (make it feel professional)
+```
+c-shell: Polish pass — small, high-signal fixes. Each item is independent;
+do NOT refactor unrelated code.
+
+1. Toolbar: the Tools ▾ dropdown labels (Format code / Snapshot / Lab
+   Report) still say "(Ctrl+Shift+Alt+F)", "(Ctrl+Alt+S)", "(Ctrl+Alt+R)"
+   — verify each shortcut is real and shown consistently with the
+   Command Palette (src/App.tsx). Fix any mismatch.
+2. Empty state for the SPLIT editor (currently shows the same file in both
+   panes — when no tab is open, add a centered empty state in each pane).
+3. Terminal: when the Problems tab has entries, its header count badge
+   should show "⚠️ N" only for errors+warnings, and the tab should show a
+   subtle dot when new diagnostics arrive while the terminal tab is
+   active. (No badge spam.)
+4. Version strings: package.json = 0.6.0-2, src-tauri/Cargo.toml =
+   0.6.0-2, tauri.conf.json = 0.6.0-2 — they already agree. Leave them.
+5. ROADMAP.md line 4 says "see DEEP_REPORT.md" and references the old
+   workflow docs; update the pointer to AUDIT.md / PROMPTS_AUDIT.md (the
+   committed report docs) so the docs don't point at deleted files.
+   README.md: no stale references found — verify and leave unless broken.
+6. Fonts: editor/terminal font settings should apply without a restart —
+   verify the "JetBrainsMono Nerd Font" family in Settings is loaded via
+   the @import in App.css and applied to both CodeMirror (cm-scroller)
+   and xterm. If xterm still uses a fallback, wire the CSS var.
+7. Status bar: "gcc • C99" should reflect the ACTIVE standard (already
+   does — verify after Prompt 18/13 changes) and stay in sync when the
+   toolbar select changes.
+Run npm run build. Gate: each item verified; no layout regressions; the
+app still builds with tsc --noEmit EXIT 0.
+```
+
+### Prompt 21 — Vivaldi-style independent editor splits (big feature — do last)
+```
+c-shell: Add true multi-pane editing — split the editor into independent
+panes, each able to open a DIFFERENT file (like Vivaldi/VS Code, NOT the
+current same-file mirror split).
+
+CURRENT: App.tsx splitView renders the same activeTab.code in both panes
+(splitEditorRef + same fileName) — you can only see the same file twice.
+
+TARGET:
+1. State: replace the boolean splitView with panes: Array of
+   { id, tabId | null } (2 panes for now; render a container with N panes).
+   Each pane renders <Editor> for ITS OWN tabId, and each pane keeps its
+   own EditorHandle (jump/outline/bookmark refs) — no shared ref.
+2. Tab selection: clicking a tab in the TabBar selects it as the ACTIVE
+   tab AND focuses the pane that currently shows it; if no pane shows it,
+   load it into the last-focused pane (or pane 1). Ctrl+1/Ctrl+2 focus a
+   pane by index.
+3. Dragging a tab from the tab bar onto a pane should LOAD that file into
+   that pane (nice-to-have; only if it doesn't complicate the tab bar).
+4. Close pane (×) on each pane header: closes that pane (if last pane,
+   fall back to the classic single-editor layout). Splitting again reuses
+   the OTHER pane.
+5. The split-editor button splits the ACTIVE pane (not a global toggle):
+   click again to un-split the focused pane.
+6. Keep split-divider resizing (drag to resize the two panes), keep
+   Ctrl+Shift+H help updated, keep the terminal unaffected. When the
+   active pane's tab closes, the pane shows a small empty state with
+   "+ Open File".
+7. The TabBar still shows ALL open tabs (shared across panes); an active
+   pane's tab gets the accent underline. Keep drag-reorder working.
+Run npm run build + tsc --noEmit. Gate: split → open file A in pane 1 and
+file B in pane 2; typing in A doesn't touch B; drag-resize works; closing
+pane 2 leaves pane 1 with A; closing pane 1 leaves the classic layout.
+```
+
+### Final: commit & push (run LAST, after every gate above passes — do NOT do this earlier)
+```
+c-shell: Everything above passed. Now commit AND push to GitHub.
+This time the user WANTS a push — but still NO release/tag.
+1. git add -A
+2. git status — confirm only expected files are staged. Add a .gitignore
+   rule for any stray file that shouldn't be tracked (e.g. .claude/
+   settings.local.json, autoharness/) rather than committing it; never
+   commit secrets or local config.
+3. git commit -m "fix: stop false compiler warnings; security hardening; polish; Vivaldi-style split editor panes"
+4. git push origin main
+then stop. Do NOT create a release, do NOT tag, do NOT open a GitHub
+release. Report the commit hash + push result.
+```
+Gate: `git status` clean (except intentionally ignored files); commit
+contains exactly the Batch 7 work; `git push origin main` succeeded and
+the remote is up to date; NO tag/release created.

@@ -13,6 +13,8 @@ node_modules
 dist
 dist-ssr
 *.local
+*.local.json
+settings.local.json
 
 # Editor directories and files
 .vscode/*
@@ -24,6 +26,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.claude/
+*/.claude/
+autoharness/
 
 # Tauri build target
 src-tauri/target
