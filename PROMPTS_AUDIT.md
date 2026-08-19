@@ -593,3 +593,266 @@ release. Report the commit hash + push result.
 Gate: `git status` clean (except intentionally ignored files); commit
 contains exactly the Batch 7 work; `git push origin main` succeeded and
 the remote is up to date; NO tag/release created.
+
+---
+
+## BATCH 8 — UI redesign (Vivaldi-style, more space, denser chrome)
+
+The user reviewed the Figma prompt and APPROVED the redesign direction:
+more editor space, denser chrome bars, a collapsible activity rail +
+file explorer, an outline panel, and Vivaldi-style independent panes.
+Do these prompts IN ORDER. This batch is UI/UX only — DO NOT touch compile
+logic, diagnostics filtering, or security code. Keep every existing color
+token EXACTLY as-is; only ADD new tokens where a prompt says so. Run
+`npx tsc --noEmit` after each prompt; gate on EXIT 0.
+
+### Prompt 22 — Space audit: tighten chrome bars + editor padding
+```
+c-shell: Give the editor more space by tightening the chrome. UI only —
+no compile/diagnostics/security changes.
+
+1. Read src/App.css and the layout classes. Current bar heights:
+   titlebar 30px, toolbar 28px, tab-bar 30px, status bar 22px. Shrink to
+   the density spec from the approved design: titlebar 28px, toolbar 32px
+   (wider, so it can absorb the Run button + standard + split in one row),
+   tab-bar 30px, breadcrumbs 24px (new), status 22px.
+2. Reduce editor surface padding: the CodeMirror .cm-content should have
+   ~8px top/left padding (not a large inset). Reduce .split-pane /
+   .pane-header padding to 6px 8px.
+3. Make sure the terminal panel, problems panel, and right outline (if
+   any) all use the tighter density too.
+Gate: the editor is visibly larger; every bar is within 1px of spec; tsc
+EXIT 0; layout still works at 1280×720.
+```
+
+### Prompt 23 — Activity rail + collapsible file explorer
+```
+c-shell: Add a collapsible file explorer with an auto-hide activity rail.
+UI only — keep the existing FileTree/useFileExplorer behavior unchanged.
+
+1. Left edge: a 40px activity rail (icon column). Icons: Explorer,
+   Search, Outline, Bookmarks, Problems, Settings. The active icon gets a
+   2px amber indicator bar on its left edge (use var(--accent)). Clicking
+   a rail icon toggles the corresponding panel; clicking the active one
+   again collapses it.
+2. Explorer: the current FileTree already renders files/folders. Wrap it
+   in a 220px (resizable to 280px) sidebar with a header showing
+   "EXPLORER" (11px semibold, letterspaced) + a collapse chevron. When
+   collapsed, only the 40px rail shows. When the rail itself is hidden
+   (View menu toggle), the explorer can't be opened.
+3. Preserve the existing FileTree interactions (click to open, drag to
+   reorder, context menu) — do NOT rewrite them.
+Gate: rail renders; clicking Explorer expands the tree; chevron collapses
+it; active icon shows the amber bar; tsc EXIT 0.
+```
+
+### Prompt 24 — Right outline panel (Symbols + Bookmarks + diagnostics)
+```
+c-shell: Add a collapsible outline panel on the RIGHT side (200–240px),
+reusing the existing symbols/bookmarks data. UI only.
+
+1. Reuse the existing symbol parsing (Editor.tsx parseSymbols — the
+   lezer walk) and the bookmarks hook (useBookmarks.ts). The panel shows:
+   - Top: a mini diagnostic strip "● 0 errors / ● 0 warnings" colored by
+     severity (use var(--error) / var(--accent), dim when clean).
+   - Symbols section: ⚡ functions, 📦 structs, 🎨 enums, 🏷️ typedefs,
+     # macros, indented by scope, each with a line number.
+   - Bookmarks section: the current bookmark gutter entries.
+2. Clicking a symbol jumps the focused pane's editor to that symbol
+   (use the existing jump mechanism / EditorHandle).
+3. The panel has a collapse chevron; when collapsed, nothing renders on
+   the right (no stray 40px rail on this side).
+Gate: symbols appear for the open file; click jumps; collapse works; the
+right panel doesn't overlap the editor; tsc EXIT 0.
+```
+
+### Prompt 25 — Command palette polish (Ctrl+Shift+P)
+```
+c-shell: Polish the existing CommandPalette (src/components/common/
+CommandPalette.tsx) to the approved design. UI only.
+
+1. Centered overlay, ~480px wide, top-third of the screen.
+2. Each row shows the command name and a keyboard-hint chip on the right
+   (e.g. Ctrl+S), dim, 10.5px.
+3. Fuzzy matching stays as-is; focus + arrow keys + Enter stay as-is.
+4. Style: bg-secondary, 1px border, 6px radius, amber selection row at
+   12% opacity.
+Gate: Ctrl+Shift+P opens it; typing filters; arrows + Enter work; tsc
+EXIT 0.
+```
+
+### Prompt 26 — Breadcrumbs + status bar diagnostic counter
+```
+c-shell: Add editor breadcrumbs and a live diagnostic counter. UI only.
+
+1. Breadcrumbs strip (24px) above the panes: workspace › folder › file.c,
+   rendered from the current tab's path. Clicking a crumb navigates to
+   that folder in the explorer if possible (best-effort; no-op if not).
+2. Status bar: add a centered diagnostic counter. Shows "0 ● 0 ▲" style
+   (errors/warnings) — use var(--error) for errors, var(--accent) for
+   warnings, var(--text-dim) when clean. It should reflect the LATEST
+   compiler-diagnostics payload the app has received (already available
+   via the existing listener in TerminalPanel; share that state or
+   duplicate it — your call, keep it simple).
+3. Keep the existing status bar right side (standard, line:col) and the
+   left side (path/branch) unchanged.
+Gate: breadcrumbs render and match the open file; counter updates after a
+build; no layout regressions; tsc EXIT 0.
+```
+
+### Prompt 27 — Vivaldi-style pane polish (per approved design)
+```
+c-shell: Polish the multi-pane system (src/components/editor/
+PanesContainer.tsx) to the approved design. The functional behavior from
+Batch 7 (independent panes, drag-tab-onto-pane, Ctrl+1/2) must NOT
+change — only the look and feel.
+
+1. Divider: 4px, col-resize cursor, hover shows var(--accent) at 40%
+   opacity. Drag preview: while dragging, show a 2px amber split-highlight
+   on the pane edge the tab would land on (best-effort; the existing drop
+   target handling already works).
+2. Pane header: filename + unsaved dot + 📂 open + × close. Make the
+   active pane's header accent-tinted (subtle amber left border or
+   underline, ~10% opacity).
+3. Empty pane: centered "No file open" + "+ Open File" button, styled per
+   the approved design (secondary button, 6px radius).
+Gate: panes still split/close/drag-drop correctly; the visual polish is
+in place; tsc EXIT 0.
+```
+
+### Prompt 28 — Tools menu + View menu (activity rail toggle, zen)
+```
+c-shell: Keep the Tools menu accurate and add View-menu toggles for the
+new chrome. UI only.
+
+1. Tools menu: verify each entry's shortcut label matches its actual
+   binding (Format code Ctrl+Shift+Alt+F, Snapshot Ctrl+Alt+S, Lab Report
+   Ctrl+Alt+R, Quick Open Ctrl+P, Command Palette Ctrl+Shift+P). Fix any
+   mismatched labels.
+2. View menu (new): "Toggle Activity Rail", "Toggle Explorer",
+   "Toggle Outline", "Toggle Bottom Dock", "Toggle Breadcrumbs", "Zen
+   Mode" (already exists — move it here if it's elsewhere).
+Gate: shortcuts shown match real bindings; View toggles work; tsc EXIT 0.
+```
+
+### Final: commit & push (run LAST, after every gate above passes — do NOT do this earlier)
+```
+c-shell: Everything above passed. Now commit AND push to GitHub.
+1. git add -A
+2. git status — confirm only expected files are staged. Add a .gitignore
+   rule for any stray file that shouldn't be tracked (e.g. .claude/
+   settings.local.json, autoharness/) rather than committing it; never
+   commit secrets or local config.
+3. git commit -m "feat(ui): Vivaldi-style redesign — denser chrome, activity rail, explorer + outline panels, breadcrumbs, status diagnostics"
+4. git push origin main
+then stop. Do NOT create a release, do NOT tag, do NOT open a GitHub
+release. Report the commit hash + push result.
+```
+Gate: `git status` clean (except intentionally ignored files); commit
+contains exactly the Batch 8 UI work; `git push origin main` succeeded
+and the remote is up to date; NO tag/release created.
+
+# BATCH 9 — The real run blocker: duplicate-symbol crashes on flat folders (2026-08-18)
+
+## Context (why this batch exists)
+The user's run crash — `gcc Untitled.c factorial.c hmm.c lol.c qi.c runtest.c test.c -o program …` → `ld: 1 duplicate symbols` (`_main`) — happens when a FOLDER contains several standalone .c programs each with their own `main()` (their `~/Documents` is exactly this today). Batch 7's Prompt 18 already added: diagnostics clearing at build start, auto-switch only on `is_error`, denylist (build/dist/node_modules/target/examples/tests), symlink skip, active-dir scoping, temp-source cleanup on success. All of that is audited and live in `16cce4e`.
+What is STILL missing: when the active dir IS the flat folder (or contains several 'main()' across its .c files at the same tree level), gcc still receives every .c in scope → duplicate `_main` → the program can't run. The fix below detects multiple `main()` definitions and compiles ONLY the active file then. Use this fix BEFORE reconsidering any UI work.
+
+### Prompt 29 — Never link two main()s (standalone-program detection in folder mode)
+```
+c-shell: Folder-mode compile still links two main() functions when a
+folder holds several standalone programs (duplicate symbol '_main',
+"ld: 1 duplicate symbol"). Example that still fails in main:
+~/Documents with lol.c / runtest.c / q1.c / etc, each with its own
+main() — compile_and_run passes workspace_dir = the folder and
+collect_folder_sources() returns every .c in the active dir's subtree;
+gcc then links N mains and ld dies. Everything from Prompt 18 (denylist,
+active-dir scope, symlink skip) is already shipped and CORRECT — do not
+regress it. Add standalone-program detection on top:
+
+1. In src-tauri/src/commands/compile.rs add (NO new deps — do NOT `cargo
+   add regex`; a hand-rolled matcher keeps the dependency surface small):
+   ```rust
+   /// True if the file defines top-level `main(`. Scans raw bytes line by
+   /// line, skipping comments/#include/#define so a comment mentioning
+   /// main() can't count. Handles `int main(void)`, `void main(int c,
+   /// char **v)`, `main()` etc. Cheap + good enough: only used to detect
+   /// the duplicate-_main case, never to prove a program is correct.
+   fn has_main_def(path: &Path) -> bool {
+       let Ok(text) = fs::read_to_string(path) else { return false };
+       for line in text.lines() {
+           let t = line.trim();
+           if t.is_empty() || t.starts_with("//") || t.starts_with('#') { continue; }
+           if t.contains("/*") { continue; } // block-comment lines: skip
+           // word-boundary 'main' followed by optional spaces then '('
+           if t.split_whitespace().any(|w| w.ends_with("main(") || w == "main")
+               && t.contains("(")
+           {
+               return true;
+           }
+       }
+       false
+   }
+   ```
+   (Worst-case: a string literal "main(" on its own line counts — rare and
+   harmless.)
+
+2. In build(), AFTER sources = collect_folder_sources(...) (and after the
+   real_file swap, before building the echo line): let sources_with_main
+   = sources.iter().filter(|s| has_main_def(s)).count();
+   if sources.len() > 1 && sources_with_main > 1 {
+       // A flat folder of standalone programs: compile only the ACTIVE
+       // one so the linker never sees two _main symbols. The active file
+       // is `real_file` when present (already swapped in), else
+       // `file_path`.
+       let keep = real_file.as_deref().unwrap_or(&file_path).to_path_buf();
+       if sources.contains(&keep) { sources = vec![keep]; }
+       emit(format!(
+           "\x1b[33m• {} main() programs in this folder — compiling the active file alone.\x1b[0m\r\n",
+           sources_with_main
+       ));
+   }
+   (still pass -I<workspace> as today so its #include headers resolve)
+
+3. Keep passing workspace_dir/-I exactly as today; do NOT remove the
+   folder-mode path — a real project (main.c + utils.c + utils.h, one
+   main) MUST still compile as a set.
+
+4. Tests: add to compile.rs:
+   - folder_sources_links_only_active_program_when_multiple_mains: root
+     with a.c/b.c/c.c each `int main(void){return 0;}` (use the real
+     has_main_def). Active = a → build source list is exactly [a.c];
+     active = b → exactly [b.c]. (Test via a small helper that mirrors
+     build()'s decision, or assert collect_folder_sources + the new
+     filter together.)
+   - single_main_folder_still_compiles_set: root with main.c (has main)
+     + utils.c (helper, no main) → the set stays [main.c, utils.c] (no
+     regression on real multi-file projects).
+   Keep the existing collect_folder_sources tests green.
+
+5. Manual gate: open the user's ~/Documents folder, put lol.c
+   (main() that printf-something and returns) + runtest.c (main() that
+   prints) in it, plus another-standalone.c with its own main(). Run
+   each as the active file. Both must COMPILE and RUN (terminal shows
+   output), no duplicate-symbol error, no warning about the other files.
+
+6. cargo test (whole suite green) + npm run build (or npx tsc --noEmit +
+   cargo check if the build toolchain isn't set up). Report the commit
+   after the Final below.
+
+Do NOT touch: the denylist, symlink skip, diagnostics-clearing, or
+error-only auto-switch logic (all audited in 16cce4e). Do NOT touch UI.
+```
+
+### Final B (run LAST, after Prompt 29's gate passes)
+```
+c-shell: Commit and push everything above.
+1. git add -A
+2. git status — confirm only expected files staged; add .gitignore rules
+   for stray files (.claude/, autoharness/) rather than committing them.
+3. git commit -m "fix(compile): never link two main()s — standalone-program detection in folder mode (was: duplicate symbol '_main')"
+4. git push origin main
+then stop. NO release, NO tag. Report the commit hash + push result.
+```
+Gate: `git status` clean; commit = Prompt 29 changes only; push succeeded; remote up to date; NO tag/release.
+NOTE: If you already ran Batch 8's Final (the UI commit+push), that's fine — this is a separate commit on top.

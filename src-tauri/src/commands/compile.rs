@@ -252,6 +252,64 @@ fn colorize_gcc_output(output: &str) -> String {
         .join("\r\n")
 }
 
+/// True if the file defines a top-level `main(`. Scans raw bytes line by
+/// line, skipping comments/#include/#define so a comment mentioning main()
+/// can't count. Handles `int main(void)`, `void main(int c, char **v)`,
+/// `main()` etc. Cheap + good enough: only used to detect the duplicate-_main
+/// case, never to prove a program is correct.
+///
+/// Comment handling is line-scoped: a `//` tail is cut, a `/* ... */` span
+/// is cut with code before it still counted (`int main(void) { /* body */ }`
+/// is a main def), and lines inside a still-open block comment are skipped
+/// entirely (a `* called from main()` comment line must not count). The one
+/// accepted miss: code after a comment that OPENED and CLOSED on the same
+/// line, like `/* x */ int main() {` — rare, and identical to the original
+/// matcher's blind spot.
+fn has_main_def(path: &Path) -> bool {
+    let Ok(text) = fs::read_to_string(path) else { return false };
+    let mut in_block = false;
+    for line in text.lines() {
+        let mut t = line.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        // Inside a /* ... */ block: only a closing */ matters — the rest of
+        // the line (code after the close) is still examined.
+        if in_block {
+            match t.find("*/") {
+                Some(i) => {
+                    t = &t[i + 2..];
+                    in_block = false;
+                }
+                None => continue,
+            }
+        }
+        // Cut a /* ... */ span; an unterminated one enters the block state.
+        // This must run BEFORE the `//` cut — a `//` inside a span is
+        // literal text (e.g. `/* http://x */`), and cutting it would fake a
+        // missing close marker.
+        if let Some(i) = t.find("/*") {
+            if !t[i + 2..].contains("*/") {
+                in_block = true;
+            }
+            t = &t[..i];
+        }
+        // Cut a `//` tail.
+        if let Some(i) = t.find("//") {
+            t = &t[..i];
+        }
+        // word-boundary 'main' followed by optional spaces then '('
+        if t
+            .split_whitespace()
+            .any(|w| w.starts_with("main(") || w == "main")
+            && t.contains("(")
+        {
+            return true;
+        }
+    }
+    false
+}
+
 fn temp_dir() -> PathBuf {
     if cfg!(windows) {
         std::env::temp_dir().join("c-shell")
@@ -372,6 +430,29 @@ fn collect_folder_sources(root: &Path, active_dir: &Path, exclude: &Path) -> Vec
     }
     out.sort();
     out
+}
+
+/// Decides the folder-mode compile set when multiple sources have their own
+/// main(). Returns (sources, sources_with_main).
+///
+/// The standalone-programs case is detected in build(): `sources.len() > 1`
+/// AND more than one file defining main(). Then the set collapses to the
+/// active file (`keep`) so the linker never sees two `_main` symbols. When
+/// the active file is somehow not in the set the collapse is skipped — the
+/// multi-main case was already broken, no point guessing.
+///
+/// Split out of build() so the decision is unit-testable without an
+/// AppHandle (build() itself needs one for emit_diagnostics/emit).
+fn resolve_compile_set(sources: &[PathBuf], keep: &Path) -> (Vec<PathBuf>, usize) {
+    let sources_with_main = sources
+        .iter()
+        .filter(|s| has_main_def(s))
+        .count();
+    if sources.len() > 1 && sources_with_main > 1 && sources.iter().any(|s| s == keep) {
+        (vec![keep.to_path_buf()], sources_with_main)
+    } else {
+        (sources.to_vec(), sources_with_main)
+    }
 }
 
 /// Builds the gcc invocation. `sources` is the .c files; `workspace_dir`
@@ -496,6 +577,20 @@ fn build(
             if real_in_workspace {
                 sources.retain(|s| s != &file_path);
             }
+        }
+        // Flat folder of standalone programs: every file has its own main()
+        // and linking them all is `ld: 1 duplicate symbol _main`. Detect it
+        // and compile ONLY the active file — the linker never sees two
+        // mains. A real project (one main + helper .c files) counts 1
+        // main and stays a set, so nothing regresses there. -I<workspace>
+        // is still passed below, so #include "utils.h" resolves either way.
+        let (sources, sources_with_main) =
+            resolve_compile_set(&sources, real_file.as_deref().unwrap_or(&file_path));
+        if sources.len() == 1 && sources_with_main > 1 {
+            emit(format!(
+                "\x1b[33m• {} main() programs in this folder — compiling the active file alone.\x1b[0m\r\n",
+                sources_with_main
+            ));
         }
     }
     let workspace_arg = folder_mode.as_ref().map(|p| p.as_path());
@@ -918,6 +1013,88 @@ mod tests {
                 String::from_utf8_lossy(&out.stderr)
             );
         }
+    }
+
+    #[test]
+    fn has_main_def_detects_common_main_signatures_and_skips_comments() {
+        // All the real-world signature shapes must count as main() defs.
+        let cases: &[(&str, bool)] = &[
+            ("int main(void) { return 0; }", true),
+            ("int main() { return 0; }", true),
+            ("void main(int argc, char **argv) {}", true),
+            ("int main (int argc, char** argv) { return 0; }", true), // space between name and paren
+            ("int main(void) { /* body */ return 0; }", true),        // inline block comment must not hide the def
+            ("int main(void) { return 0; } // entry point", true),    // // tail must not hide the def
+            ("// int main(void) { return 0; }", false),               // commented-out program
+            ("/* int main(void) { return 0; } */", false),
+            ("#include <stdio.h>", false),
+            ("#define main(x) x", false),
+            ("int helper(void) { return 1; }", false),                // no main
+            ("/*\n * dispatch: see main() for usage\n */\nint helper(void) { return 1; }", false), // block-comment mention must not count
+            ("", false),
+        ];
+        let root = temp_dir().join("has_main_test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        for (i, (src, expected)) in cases.iter().enumerate() {
+            let f = root.join(format!("case_{}.c", i));
+            fs::write(&f, src).unwrap();
+            assert_eq!(
+                has_main_def(&f),
+                *expected,
+                "case {}: {:?}",
+                i,
+                src
+            );
+        }
+        // Unreadable file never panics — absence of evidence is not main().
+        assert!(!has_main_def(&root.join("missing.c")));
+    }
+
+    #[test]
+    fn folder_sources_links_only_active_program_when_multiple_mains() {
+        // A flat folder of standalone programs: a.c / b.c / c.c, each with
+        // its own main(). Folder mode must compile ONLY the active file —
+        // linking all three would be `ld: 1 duplicate symbol _main`.
+        let root = temp_dir().join("multi_main_test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        for name in ["a.c", "b.c", "c.c"] {
+            fs::write(
+                root.join(name),
+                format!("int main(void) {{ return 0; }} // {}\n", name),
+            )
+            .unwrap();
+        }
+        let all = collect_folder_sources(&root, &root, &temp_dir());
+        assert_eq!(all.len(), 3);
+
+        // Active = a.c → the set collapses to exactly [a.c].
+        let (set, mains) = resolve_compile_set(&all, &root.join("a.c"));
+        assert_eq!(mains, 3);
+        assert_eq!(set, vec![root.join("a.c")]);
+
+        // Active = b.c → exactly [b.c].
+        let (set, _) = resolve_compile_set(&all, &root.join("b.c"));
+        assert_eq!(set, vec![root.join("b.c")]);
+    }
+
+    #[test]
+    fn single_main_folder_still_compiles_set() {
+        // A real project — main.c (the one main) + utils.c (helper, no
+        // main). sources_with_main == 1 so the set must stay
+        // [main.c, utils.c]; no regression on multi-file projects.
+        let root = temp_dir().join("single_main_test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
+        fs::write(root.join("utils.c"), "int helper(void) { return 1; }\n").unwrap();
+        let all = collect_folder_sources(&root, &root, &temp_dir());
+        assert_eq!(all.len(), 2);
+
+        let (set, mains) = resolve_compile_set(&all, &root.join("main.c"));
+        assert_eq!(mains, 1);
+        assert_eq!(set, all); // unchanged: still the whole project
     }
 
     #[test]
