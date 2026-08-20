@@ -252,115 +252,6 @@ fn colorize_gcc_output(output: &str) -> String {
         .join("\r\n")
 }
 
-/// Strips one physical line down to its effective code, given the running
-/// block-comment state. Returns (effective code, block state to carry into
-/// the next line). Blank and `#` lines yield empty code. A `//` tail is cut;
-/// a `/* ... */` span is cut with code before it kept (so
-/// `int main(void) { /* body */ }` is still a main def); lines inside a
-/// still-open block are skipped entirely (so a `* called from main()`
-/// comment line can't count). Shared by the outer scan and the forward scan
-/// for a trailing bare `main`, so both enforce identical comment semantics.
-fn strip_line<'a>(line: &'a str, mut in_block: bool) -> (&'a str, bool) {
-    let mut t = line.trim();
-    if t.is_empty() || t.starts_with('#') {
-        return ("", in_block);
-    }
-    // Inside a /* ... */ block: only a closing */ matters — the rest of the
-    // line (code after the close) is still examined.
-    if in_block {
-        match t.find("*/") {
-            Some(i) => {
-                t = &t[i + 2..];
-                in_block = false;
-            }
-            None => return ("", true),
-        }
-    }
-    // Cut a /* ... */ span; an unterminated one enters the block state.
-    // This must run BEFORE the `//` cut — a `//` inside a span is literal
-    // text (e.g. `/* http://x */`), and cutting it would fake a missing
-    // close marker.
-    if let Some(i) = t.find("/*") {
-        if !t[i + 2..].contains("*/") {
-            in_block = true;
-        }
-        t = &t[..i];
-    }
-    // Cut a `//` tail.
-    if let Some(i) = t.find("//") {
-        t = &t[..i];
-    }
-    (t, in_block)
-}
-
-/// True if the file defines a top-level `main(`. Scans raw bytes line by
-/// line, skipping comments/#include/#define so a comment mentioning main()
-/// can't count. Handles `int main(void)`, `void main(int c, char **v)`,
-/// `main()` etc., and also a `main` whose parameter list begins on a later
-/// physical line — `int\nmain\n(void)`, `int main\n(void)` — by scanning
-/// forward across blank/comment/# lines for the `(` that opens it. Cheap +
-/// good enough: only used to detect the duplicate-_main case, never to prove
-/// a program is correct.
-///
-/// Comment handling is line-scoped: a `//` tail is cut, a `/* ... */` span
-/// is cut with code before it still counted, and lines inside a still-open
-/// block comment are skipped entirely. The one accepted miss: code after a
-/// comment that OPENED and CLOSED on the same line, like
-/// `/* x */ int main() {` — rare, and identical to the original matcher's
-/// blind spot.
-fn has_main_def(path: &Path) -> bool {
-    let Ok(text) = fs::read_to_string(path) else { return false };
-    let lines: Vec<&str> = text.lines().collect();
-    let mut in_block = false;
-    let mut i = 0;
-    while i < lines.len() {
-        let (code, next_block) = strip_line(lines[i], in_block);
-        in_block = next_block;
-        let mut next = i + 1;
-        if !code.is_empty() {
-            // Same-line: a `main` token plus a `(` anywhere on the line
-            // (`main(void)`, `int main (void)`, `int main() { /* */ }`).
-            if code
-                .split_whitespace()
-                .any(|w| w.starts_with("main(") || w == "main")
-                && code.contains("(")
-            {
-                return true;
-            }
-            // A bare `main` ending the line continues on a following line
-            // (`int\nmain\n(void)`). Scan forward for the `(` that opens its
-            // parameter list. Only a `(` as the FIRST significant character
-            // after the `main` counts — a `;`, `=`, `[` or any other token
-            // appearing first means `main` is a variable, not a function, and
-            // the scan stops there (that line is then examined by the outer
-            // loop like any other).
-            if code.split_whitespace().next_back() == Some("main") {
-                let mut j = i + 1;
-                let mut stopped_at = None;
-                while j < lines.len() {
-                    let (ncode, nblock) = strip_line(lines[j], in_block);
-                    in_block = nblock;
-                    let n = ncode.trim();
-                    if !n.is_empty() {
-                        if n.starts_with('(') {
-                            return true;
-                        }
-                        stopped_at = Some(j);
-                        break;
-                    }
-                    j += 1;
-                }
-                // Lines the scan passed over were blank/comment/# noise
-                // (already stripped, `in_block` advanced past them); the line
-                // it stopped on, if any, gets a fresh outer-loop pass.
-                next = stopped_at.unwrap_or(lines.len());
-            }
-        }
-        i = next;
-    }
-    false
-}
-
 fn temp_dir() -> PathBuf {
     if cfg!(windows) {
         std::env::temp_dir().join("c-shell")
@@ -402,129 +293,6 @@ struct BuildOutcome {
 /// previous program can never survive into a fresh one.
 fn emit_diagnostics(app: &AppHandle, diagnostics: Vec<Diagnostic>) {
     let _ = app.emit("compiler-diagnostics", diagnostics);
-}
-
-/// Directory segments that are never project C sources: generated output,
-/// vendored deps, VCS internals, and the build temp dir itself. Matched
-/// against each path component, so a `.c` nested under `build/`, `dist/`,
-/// `node_modules/`, `target/`, `.git/`, `examples/` or `tests/` anywhere in
-/// the tree is skipped (e.g. `src/examples/legacy.c` from a template repo).
-fn is_excluded_dir(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    matches!(
-        lower.as_str(),
-        "build" | "dist" | "node_modules" | "target" | ".git" | "examples" | "tests" | "test"
-    ) || lower.starts_with("build")
-        || lower.starts_with("dist")
-        || lower.ends_with(".tmp")
-}
-
-/// Recursively collects the `.c` files that belong to the project rooted at
-/// `root`, given the active file's own directory (`active_dir`, which may
-/// itself lie below `root`).
-///
-/// Scope rules:
-/// 1. Only the active file's own subtree is compiled — a folder loaded at
-///    the repo root must not pull in unrelated programs sitting in sibling
-///    folders or at the root itself (each with their own main() and their
-///    own warnings). `root` merely anchors the traversal so the walk can
-///    never escape the workspace.
-/// 2. When the active file is not inside the workspace, no workspace sources
-///    are collected at all — the single-file path compiles just that file.
-/// 3. Directories named `build`, `dist`, `node_modules`, `target`, `.git`,
-///    `examples`, `tests`/`test` (and `build*`/`dist*` prefixes) are skipped
-///    entirely; their sources are never examples of "the program".
-/// 4. `exclude` (the build temp dir) is never descended into.
-/// 5. Symlinks are never followed — neither a symlinked directory (its
-///    target may live outside the workspace entirely) nor a symlinked .c
-///    file. The walk's read_dir only lists entries; deciding via
-///    `file_type()` (the entry itself, not its target) keeps every
-///    compiled path inside the workspace.
-///
-/// `.h` headers are pulled in via -I, never listed on the command line.
-fn collect_folder_sources(root: &Path, active_dir: &Path, exclude: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let mut stack = vec![active_dir.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        // Never escape the workspace, never touch the build temp dir.
-        if dir == exclude || !dir.starts_with(root) {
-            continue;
-        }
-        let Ok(entries) = fs::read_dir(&dir) else { continue };
-        for entry in entries.flatten() {
-            // The entry's own file type (lstat semantics): a symlink is a
-            // symlink even when its target is a dir or a .c file.
-            let Ok(ftype) = entry.file_type() else { continue };
-            if ftype.is_symlink() {
-                continue;
-            }
-            let path = entry.path();
-            if ftype.is_dir() {
-                // Skip excluded dirs outright — don't descend into them.
-                let name = path.file_name().map(|n| n.to_string_lossy().to_string());
-                let excluded = name
-                    .as_deref()
-                    .map(is_excluded_dir)
-                    .unwrap_or(false);
-                if !excluded {
-                    stack.push(path);
-                }
-            } else if ftype.is_file()
-                && path
-                    .extension()
-                    .map(|e| e.eq_ignore_ascii_case("c"))
-                    .unwrap_or(false)
-            {
-                out.push(path);
-            }
-        }
-    }
-    out.sort();
-    out
-}
-
-/// Decides the folder-mode compile set when multiple sources have their own
-/// main(). Returns (sources, sources_with_main).
-///
-/// The standalone-programs case is detected in build(): `sources.len() > 1`
-/// AND more than one file defining main(). Then the set collapses to the
-/// active file (`keep`) so the linker never sees two `_main` symbols. When
-/// the active file is somehow not in the set the collapse is skipped — the
-/// multi-main case was already broken, no point guessing.
-///
-/// Split out of build() so the decision is unit-testable without an
-/// AppHandle (build() itself needs one for emit_diagnostics/emit).
-fn resolve_compile_set(sources: &[PathBuf], keep: &Path) -> (Vec<PathBuf>, usize) {
-    let sources_with_main = sources
-        .iter()
-        .filter(|s| has_main_def(s))
-        .count();
-    if sources.len() > 1 && sources_with_main > 1 && sources.iter().any(|s| s == keep) {
-        (vec![keep.to_path_buf()], sources_with_main)
-    } else {
-        (sources.to_vec(), sources_with_main)
-    }
-}
-
-/// The amber notice emitted when folder mode collapses the compile set to the
-/// active file alone. Two distinct shapes need distinct wording: the active
-/// file itself defines a main() (the usual flat folder of standalone
-/// programs) or it does not (the user opened a fragment with no main while
-/// the folder's real programs have one). In the latter the linker's
-/// "undefined _main" should read as "the active file is missing its main()",
-/// not as a mystery — so the notice says so up front.
-fn folder_collapse_notice(active_has_main: bool, sources_with_main: usize) -> String {
-    if active_has_main {
-        format!(
-            "\x1b[33m• {} main() programs in this folder — compiling the active file alone.\x1b[0m\r\n",
-            sources_with_main
-        )
-    } else {
-        format!(
-            "\x1b[33m• The active file has no main() (the other {} programs in this folder do) — only it was compiled, so expect the linker's \"undefined _main\". Add a main() to this file.\x1b[0m\r\n",
-            sources_with_main
-        )
-    }
 }
 
 /// Builds the gcc invocation. `sources` is the .c files; `workspace_dir`
@@ -611,84 +379,55 @@ fn build(
 
     let _ = fs::remove_file(&binary_path);
 
-    // Folder mode: workspace root resolves, exists, and holds at least one
-    // other .c file — otherwise fall back to single-file. When the active
-    // file lives in the workspace, the real file (not the temp copy) is what
-    // gcc compiles; the temp copy is only written as a fallback and removed
-    // either way once the build is done.
-    let active_dir = Path::new(filename)
-        .parent()
-        .and_then(|p| fs::canonicalize(p).ok());
-    let folder_mode = workspace_dir
+    // Single-file compilation, always. Run/Compile compiles exactly the
+    // active file — never the sibling .c files in the folder — so a flat
+    // folder of standalone programs (each with its own main()) can never
+    // blow up the linker with `ld: duplicate symbol _main`. The run happens
+    // in a temp dir, so the -I workspace flag below is only useful for
+    // #include "header.h" in the same folder (workspace_dir resolves to the
+    // active file's own directory). When the active file lives inside the
+    // workspace, the real on-disk source (not the temp copy) is what gcc
+    // compiles, so diagnostics line numbers point at the real file and a
+    // stale temp copy from an earlier session can never be recompiled.
+    let mut sources = vec![file_path.clone()];
+    let mut include_dir = None;
+    if let Some(w) = workspace_dir
         .as_deref()
         .filter(|w| !w.trim().is_empty())
         .and_then(|w| Path::new(w).canonicalize().ok())
-        .filter(|w| w.is_dir())
-        .filter(|w| w != &dir)
-        .filter(|w| {
-            let active = active_dir.as_deref().unwrap_or(w);
-            collect_folder_sources(w, active, &dir)
-                .iter()
-                .any(|s| s != &file_path)
-        });
-    let mut sources = vec![file_path.clone()];
-    if let Some(w) = &folder_mode {
-        let real_file = Path::new(filename).canonicalize().ok();
-        sources = collect_folder_sources(w, active_dir.as_deref().unwrap_or(w), &dir);
-        if !sources.contains(&file_path) {
-            sources.push(file_path.clone());
-        }
-        sources.sort();
-        if let Some(real) = &real_file {
-            // Compile the on-disk source instead of the temp copy so the
-            // diagnostics line numbers point at the real file, and a stale
-            // temp copy from an earlier session can never be recompiled.
-            let real_in_workspace = sources
-                .iter()
-                .any(|s| s == real);
-            if real_in_workspace {
-                sources.retain(|s| s != &file_path);
+        .filter(|w| w.is_dir() && w != &dir)
+    {
+        include_dir = Some(w.clone());
+        if let Ok(real) = Path::new(filename).canonicalize() {
+            // Only swap the temp copy for the real file when the real file
+            // actually lives under the workspace it was opened in.
+            if !real.starts_with(&w) {
+                include_dir = None;
+            } else if real.extension().map(|e| e.eq_ignore_ascii_case("c")).unwrap_or(false) {
+                sources = vec![real];
             }
-        }
-        // Flat folder of standalone programs: every file has its own main()
-        // and linking them all is `ld: 1 duplicate symbol _main`. Detect it
-        // and compile ONLY the active file — the linker never sees two
-        // mains. A real project (one main + helper .c files) counts 1
-        // main and stays a set, so nothing regresses there. -I<workspace>
-        // is still passed below, so #include "utils.h" resolves either way.
-        let keep = real_file.as_deref().unwrap_or(&file_path);
-        let (sources, sources_with_main) = resolve_compile_set(&sources, keep);
-        if sources.len() == 1 && sources_with_main > 1 {
-            // Same compile outcome either way — only the active file is
-            // linked — but the notice must say which shape this is:
-            // normal standalone-dev folder (active HAS main) vs. the user
-            // opened an incomplete snippet (active LACKS main, and the
-            // linker's "undefined _main" is exactly that gap).
-            emit(folder_collapse_notice(has_main_def(keep), sources_with_main));
+            // Diagnostic line numbers now point at the real file; remove the
+            // temp copy so the (unused) fallback can't linger. (The success
+            // and failure branches below also remove it — a no-op here.)
+            let _ = fs::remove_file(&file_path);
         }
     }
-    let workspace_arg = folder_mode.as_ref().map(|p| p.as_path());
 
-    let sources_display: Vec<String> = sources
-        .iter()
-        .map(|s| s.file_name().unwrap_or_default().to_string_lossy().to_string())
-        .collect();
-    let echo_line = match &folder_mode {
+    let sources_display = base_name.to_string();
+    let echo_line = match &include_dir {
         Some(w) => format!(
             "\r\n$ gcc {} -o program -std={} -Wall -I{}\r\n",
-            sources_display.join(" "),
-            std_flag,
-            w.display()
+            sources_display, std_flag, w.display()
         ),
         None => format!(
             "\r\n$ gcc {} -o program -std={} -Wall\r\n",
-            base_name, std_flag
+            sources_display, std_flag
         ),
     };
     emit(echo_line);
 
     let start = Instant::now();
-    let compile_output = gcc_command(&sources, &binary_path, &std_flag, workspace_arg)
+    let compile_output = gcc_command(&sources, &binary_path, &std_flag, include_dir.as_deref())
         .output()
         .map_err(|e| format!("Failed to run gcc: {}", e))?;
     let elapsed = start.elapsed();
@@ -1090,264 +829,6 @@ mod tests {
     }
 
     #[test]
-    fn has_main_def_detects_common_main_signatures_and_skips_comments() {
-        // All the real-world signature shapes must count as main() defs.
-        let cases: &[(&str, bool)] = &[
-            ("int main(void) { return 0; }", true),
-            ("int main() { return 0; }", true),
-            ("void main(int argc, char **argv) {}", true),
-            ("int main (int argc, char** argv) { return 0; }", true), // space between name and paren
-            ("int main(void) { /* body */ return 0; }", true),        // inline block comment must not hide the def
-            ("int main(void) { return 0; } // entry point", true),    // // tail must not hide the def
-            ("// int main(void) { return 0; }", false),               // commented-out program
-            ("/* int main(void) { return 0; } */", false),
-            ("#include <stdio.h>", false),
-            ("#define main(x) x", false),
-            ("int helper(void) { return 1; }", false),                // no main
-            ("/*\n * dispatch: see main() for usage\n */\nint helper(void) { return 1; }", false), // block-comment mention must not count
-            ("", false),
-        ];
-        let root = temp_dir().join("has_main_test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
-        for (i, (src, expected)) in cases.iter().enumerate() {
-            let f = root.join(format!("case_{}.c", i));
-            fs::write(&f, src).unwrap();
-            assert_eq!(
-                has_main_def(&f),
-                *expected,
-                "case {}: {:?}",
-                i,
-                src
-            );
-        }
-        // Unreadable file never panics — absence of evidence is not main().
-        assert!(!has_main_def(&root.join("missing.c")));
-    }
-
-    #[test]
-    fn has_main_def_detects_main_param_list_on_following_lines() {
-        // `main` and its `(` can sit on different physical lines — previously
-        // the same-line matcher required both on one line, so it silently
-        // missed these and re-opened the duplicate-_main hole. Only a `(` as
-        // the FIRST significant code char after a bare `main` counts; a
-        // preceding `;`/`=`/`[` or an identifier means `main` was a variable.
-        let cases: &[(&str, bool)] = &[
-            ("int\nmain\n(void) { return 0; }", true),
-            ("int main\n(void) { return 0; }", true),
-            ("int main\n  (int argc, char **argv) { return 0; }", true),
-            ("main\n(void) { return 0; }", true),
-            // Blank lines, // comments and `#` lines between `main` and `(` are
-            // noise — the forward scan must pass straight through them.
-            ("int main\n\n(void) { return 0; }", true),
-            ("int main\n// note\n(void) { return 0; }", true),
-            ("int main\n/* note */\n(void) { return 0; }", true),
-            ("int main\n#ifndef X\n#endif\n(void) { return 0; }", true),
-            // First significant char is not `(` → `main` is a variable, and
-            // the scan must stop, not wander on to some later `(`.
-            ("int main\n= helper();", false),
-            ("int main\n;", false),
-            ("int main\n;\nint f(void) { return 0; }", false),
-            ("int main\n_[x];", false),
-            // A `(` hiding inside an open block comment is not a parameter
-            // list and must not be reached.
-            ("int main\n/*\n(void)\n*/\nint x;", false),
-            // The single-line signatures keep working alongside the new ones.
-            ("int main(void) { return 0; }", true),
-            ("int main (int argc, char **argv) { return 0; }", true),
-        ];
-        let root = temp_dir().join("has_main_multiline_test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
-        for (i, (src, expected)) in cases.iter().enumerate() {
-            let f = root.join(format!("case_{}.c", i));
-            fs::write(&f, src).unwrap();
-            assert_eq!(
-                has_main_def(&f),
-                *expected,
-                "case {}: {:?}",
-                i,
-                src
-            );
-        }
-    }
-
-    #[test]
-    fn folder_collapse_notice_calls_out_active_file_lacking_main() {
-        let with_main = folder_collapse_notice(true, 4);
-        assert!(
-            with_main.contains("4 main() programs"),
-            "got: {}",
-            with_main
-        );
-        assert!(!with_main.contains("no main()"), "got: {}", with_main);
-        let without_main = folder_collapse_notice(false, 4);
-        assert!(
-            without_main.contains("has no main()"),
-            "got: {}",
-            without_main
-        );
-        assert!(
-            without_main.contains("undefined _main"),
-            "got: {}",
-            without_main
-        );
-    }
-
-    #[test]
-    fn folder_sources_links_only_active_program_when_multiple_mains() {
-        // A flat folder of standalone programs: a.c / b.c / c.c, each with
-        // its own main(). Folder mode must compile ONLY the active file —
-        // linking all three would be `ld: 1 duplicate symbol _main`.
-        let root = temp_dir().join("multi_main_test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
-        for name in ["a.c", "b.c", "c.c"] {
-            fs::write(
-                root.join(name),
-                format!("int main(void) {{ return 0; }} // {}\n", name),
-            )
-            .unwrap();
-        }
-        let all = collect_folder_sources(&root, &root, &temp_dir());
-        assert_eq!(all.len(), 3);
-
-        // Active = a.c → the set collapses to exactly [a.c].
-        let (set, mains) = resolve_compile_set(&all, &root.join("a.c"));
-        assert_eq!(mains, 3);
-        assert_eq!(set, vec![root.join("a.c")]);
-
-        // Active = b.c → exactly [b.c].
-        let (set, _) = resolve_compile_set(&all, &root.join("b.c"));
-        assert_eq!(set, vec![root.join("b.c")]);
-    }
-
-    #[test]
-    fn single_main_folder_still_compiles_set() {
-        // A real project — main.c (the one main) + utils.c (helper, no
-        // main). sources_with_main == 1 so the set must stay
-        // [main.c, utils.c]; no regression on multi-file projects.
-        let root = temp_dir().join("single_main_test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
-        fs::write(root.join("utils.c"), "int helper(void) { return 1; }\n").unwrap();
-        let all = collect_folder_sources(&root, &root, &temp_dir());
-        assert_eq!(all.len(), 2);
-
-        let (set, mains) = resolve_compile_set(&all, &root.join("main.c"));
-        assert_eq!(mains, 1);
-        assert_eq!(set, all); // unchanged: still the whole project
-    }
-
-    #[test]
-    fn folder_sources_collected_with_headers_not_listed() {
-        let root = temp_dir().join("ws_test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("sub")).unwrap();
-        fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
-        fs::write(root.join("utils.c"), "int helper(void) { return 1; }\n").unwrap();
-        fs::write(root.join("utils.h"), "int helper(void);\n").unwrap();
-        fs::write(root.join("sub/extra.c"), "int extra(void) { return 2; }\n").unwrap();
-        fs::write(root.join("notes.txt"), "not a source\n").unwrap();
-
-        // Active file in the root: whole project tree is in scope.
-        let srcs = collect_folder_sources(&root, &root, &temp_dir());
-        let rel: Vec<String> = srcs
-            .iter()
-            .map(|s| s.strip_prefix(&root).unwrap().to_string_lossy().to_string())
-            .collect();
-        assert_eq!(rel, vec!["main.c", "sub/extra.c", "utils.c"]);
-    }
-
-    #[test]
-    fn folder_sources_scoped_to_active_file_subtree() {
-        // Active file lives in `sub` → only sub/ sources are compiled; the
-        // sibling program at the root must not be pulled in (it has its own
-        // main() and would only contribute duplicate symbols / foreign
-        // warnings).
-        let root = temp_dir().join("scope_test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("sub")).unwrap();
-        fs::create_dir_all(root.join("sibling")).unwrap();
-        fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
-        fs::write(root.join("sub/other.c"), "int other(void) { return 1; }\n").unwrap();
-        fs::write(root.join("sibling/unrelated.c"), "int unrelated(void) { return 2; }\n").unwrap();
-
-        let active_dir = root.join("sub");
-        let srcs = collect_folder_sources(&root, &active_dir, &temp_dir());
-        let rel: Vec<String> = srcs
-            .iter()
-            .map(|s| s.strip_prefix(&root).unwrap().to_string_lossy().to_string())
-            .collect();
-        assert_eq!(rel, vec!["sub/other.c"]);
-    }
-
-    #[test]
-    fn folder_sources_excludes_build_dist_node_modules_and_examples() {
-        let root = temp_dir().join("exclude_test");
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("build")).unwrap();
-        fs::create_dir_all(root.join("dist")).unwrap();
-        fs::create_dir_all(root.join("node_modules/lib")).unwrap();
-        fs::create_dir_all(root.join("examples")).unwrap();
-        fs::create_dir_all(root.join("tests")).unwrap();
-        fs::create_dir_all(root.join("src/examples")).unwrap();
-        fs::create_dir_all(root.join("src/build_vendor")).unwrap();
-        fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
-        fs::write(root.join("build/generated.c"), "int gen(void) { return 1; }\n").unwrap();
-        fs::write(root.join("dist/bundle.c"), "int bundle(void) { return 2; }\n").unwrap();
-        fs::write(root.join("node_modules/lib/legacy.c"), "int legacy(void) { return 3; }\n").unwrap();
-        fs::write(root.join("examples/hello.c"), "int hello(void) { return 4; }\n").unwrap();
-        fs::write(root.join("tests/test_main.c"), "int test(void) { return 5; }\n").unwrap();
-        fs::write(root.join("src/examples/legacy.c"), "int legacy2(void) { return 6; }\n").unwrap();
-        fs::write(root.join("src/build_vendor/dep.c"), "int dep(void) { return 7; }\n").unwrap();
-        fs::write(root.join("src/real.c"), "int real(void) { return 8; }\n").unwrap();
-
-        let srcs = collect_folder_sources(&root, &root, &temp_dir());
-        let rel: Vec<String> = srcs
-            .iter()
-            .map(|s| s.strip_prefix(&root).unwrap().to_string_lossy().to_string())
-            .collect();
-        assert_eq!(rel, vec!["main.c", "src/real.c"]);
-    }
-
-    #[test]
-    fn folder_sources_never_follows_symlinks() {
-        // A symlinked subdir or .c file must not escape the workspace: the
-        // walk decides on the entry's own file type (lstat), never on what
-        // the symlink points to.
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::symlink;
-
-            let root = temp_dir().join("symlink_test");
-            let _ = fs::remove_dir_all(&root);
-            fs::create_dir_all(&root).unwrap();
-            fs::write(root.join("main.c"), "int main(void) { return 0; }\n").unwrap();
-            fs::write(root.join("real.c"), "int real(void) { return 1; }\n").unwrap();
-
-            // Outside dir holding files a naive walk would pull in.
-            let outside = temp_dir().join("symlink_outside");
-            let _ = fs::remove_dir_all(&outside);
-            fs::create_dir_all(&outside).unwrap();
-            fs::write(outside.join("escaped.c"), "int escaped(void) { return 2; }\n").unwrap();
-
-            symlink(&outside, root.join("linked_dir")).unwrap();
-            symlink(outside.join("escaped.c"), root.join("linked_file.c")).unwrap();
-
-            let srcs = collect_folder_sources(&root, &root, &temp_dir());
-            let rel: Vec<String> = srcs
-                .iter()
-                .map(|s| s.strip_prefix(&root).unwrap().to_string_lossy().to_string())
-                .collect();
-            assert_eq!(rel, vec!["main.c", "real.c"]);
-        }
-        // On non-Unix there is nothing to assert; the function itself is
-        // platform-independent.
-    }
-
-    #[test]
     fn run_config_arg_with_quote_and_space_round_trips() {
         // shell_quote wraps the arg in single quotes and escapes inner
         // quotes as '\'' — a value with BOTH a single quote AND a space
@@ -1386,22 +867,17 @@ mod tests {
     }
 
     #[test]
-    fn folder_mode_compiles_two_files_with_include() {
-        // A real 2-file project: main.c calls a function declared in utils.h
-        // and defined in utils.c. Folder mode must pass both files to gcc
-        // with -I<dir> so the header resolves — single-file mode would fail
-        // with an undefined reference.
+    fn gcc_command_compiles_single_file_with_include_dir() {
+        // Per-file compile with -I for the header: a standalone program whose
+        // helpers live entirely in the .c file itself compiles alone and
+        // runs — the old "compile the whole folder as one set" behavior is
+        // gone, so a sibling .c is never passed to gcc.
         let root = temp_dir().join("proj_test");
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         fs::write(
             root.join("utils.h"),
-            "int helper(void);\n",
-        )
-        .unwrap();
-        fs::write(
-            root.join("utils.c"),
-            "int helper(void) { return 42; }\n",
+            "static inline int helper(void) { return 42; }\n",
         )
         .unwrap();
         fs::write(
@@ -1410,13 +886,13 @@ mod tests {
         )
         .unwrap();
 
-        let srcs = collect_folder_sources(&root, &root, &temp_dir());
+        let srcs = vec![root.join("main.c")];
         let bin = temp_dir().join("proj_test_program");
         let mut cmd = gcc_command(&srcs, &bin, "c99", Some(&root));
         let out = cmd.output().expect("gcc runs");
         assert!(
             out.status.success(),
-            "2-file folder compile failed: {}",
+            "single-file compile with -I failed: {}",
             String::from_utf8_lossy(&out.stderr)
         );
         let run = Command::new(&bin)
