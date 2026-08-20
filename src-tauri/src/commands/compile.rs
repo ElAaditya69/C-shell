@@ -252,60 +252,111 @@ fn colorize_gcc_output(output: &str) -> String {
         .join("\r\n")
 }
 
+/// Strips one physical line down to its effective code, given the running
+/// block-comment state. Returns (effective code, block state to carry into
+/// the next line). Blank and `#` lines yield empty code. A `//` tail is cut;
+/// a `/* ... */` span is cut with code before it kept (so
+/// `int main(void) { /* body */ }` is still a main def); lines inside a
+/// still-open block are skipped entirely (so a `* called from main()`
+/// comment line can't count). Shared by the outer scan and the forward scan
+/// for a trailing bare `main`, so both enforce identical comment semantics.
+fn strip_line<'a>(line: &'a str, mut in_block: bool) -> (&'a str, bool) {
+    let mut t = line.trim();
+    if t.is_empty() || t.starts_with('#') {
+        return ("", in_block);
+    }
+    // Inside a /* ... */ block: only a closing */ matters — the rest of the
+    // line (code after the close) is still examined.
+    if in_block {
+        match t.find("*/") {
+            Some(i) => {
+                t = &t[i + 2..];
+                in_block = false;
+            }
+            None => return ("", true),
+        }
+    }
+    // Cut a /* ... */ span; an unterminated one enters the block state.
+    // This must run BEFORE the `//` cut — a `//` inside a span is literal
+    // text (e.g. `/* http://x */`), and cutting it would fake a missing
+    // close marker.
+    if let Some(i) = t.find("/*") {
+        if !t[i + 2..].contains("*/") {
+            in_block = true;
+        }
+        t = &t[..i];
+    }
+    // Cut a `//` tail.
+    if let Some(i) = t.find("//") {
+        t = &t[..i];
+    }
+    (t, in_block)
+}
+
 /// True if the file defines a top-level `main(`. Scans raw bytes line by
 /// line, skipping comments/#include/#define so a comment mentioning main()
 /// can't count. Handles `int main(void)`, `void main(int c, char **v)`,
-/// `main()` etc. Cheap + good enough: only used to detect the duplicate-_main
-/// case, never to prove a program is correct.
+/// `main()` etc., and also a `main` whose parameter list begins on a later
+/// physical line — `int\nmain\n(void)`, `int main\n(void)` — by scanning
+/// forward across blank/comment/# lines for the `(` that opens it. Cheap +
+/// good enough: only used to detect the duplicate-_main case, never to prove
+/// a program is correct.
 ///
 /// Comment handling is line-scoped: a `//` tail is cut, a `/* ... */` span
-/// is cut with code before it still counted (`int main(void) { /* body */ }`
-/// is a main def), and lines inside a still-open block comment are skipped
-/// entirely (a `* called from main()` comment line must not count). The one
-/// accepted miss: code after a comment that OPENED and CLOSED on the same
-/// line, like `/* x */ int main() {` — rare, and identical to the original
-/// matcher's blind spot.
+/// is cut with code before it still counted, and lines inside a still-open
+/// block comment are skipped entirely. The one accepted miss: code after a
+/// comment that OPENED and CLOSED on the same line, like
+/// `/* x */ int main() {` — rare, and identical to the original matcher's
+/// blind spot.
 fn has_main_def(path: &Path) -> bool {
     let Ok(text) = fs::read_to_string(path) else { return false };
+    let lines: Vec<&str> = text.lines().collect();
     let mut in_block = false;
-    for line in text.lines() {
-        let mut t = line.trim();
-        if t.is_empty() || t.starts_with('#') {
-            continue;
-        }
-        // Inside a /* ... */ block: only a closing */ matters — the rest of
-        // the line (code after the close) is still examined.
-        if in_block {
-            match t.find("*/") {
-                Some(i) => {
-                    t = &t[i + 2..];
-                    in_block = false;
+    let mut i = 0;
+    while i < lines.len() {
+        let (code, next_block) = strip_line(lines[i], in_block);
+        in_block = next_block;
+        let mut next = i + 1;
+        if !code.is_empty() {
+            // Same-line: a `main` token plus a `(` anywhere on the line
+            // (`main(void)`, `int main (void)`, `int main() { /* */ }`).
+            if code
+                .split_whitespace()
+                .any(|w| w.starts_with("main(") || w == "main")
+                && code.contains("(")
+            {
+                return true;
+            }
+            // A bare `main` ending the line continues on a following line
+            // (`int\nmain\n(void)`). Scan forward for the `(` that opens its
+            // parameter list. Only a `(` as the FIRST significant character
+            // after the `main` counts — a `;`, `=`, `[` or any other token
+            // appearing first means `main` is a variable, not a function, and
+            // the scan stops there (that line is then examined by the outer
+            // loop like any other).
+            if code.split_whitespace().next_back() == Some("main") {
+                let mut j = i + 1;
+                let mut stopped_at = None;
+                while j < lines.len() {
+                    let (ncode, nblock) = strip_line(lines[j], in_block);
+                    in_block = nblock;
+                    let n = ncode.trim();
+                    if !n.is_empty() {
+                        if n.starts_with('(') {
+                            return true;
+                        }
+                        stopped_at = Some(j);
+                        break;
+                    }
+                    j += 1;
                 }
-                None => continue,
+                // Lines the scan passed over were blank/comment/# noise
+                // (already stripped, `in_block` advanced past them); the line
+                // it stopped on, if any, gets a fresh outer-loop pass.
+                next = stopped_at.unwrap_or(lines.len());
             }
         }
-        // Cut a /* ... */ span; an unterminated one enters the block state.
-        // This must run BEFORE the `//` cut — a `//` inside a span is
-        // literal text (e.g. `/* http://x */`), and cutting it would fake a
-        // missing close marker.
-        if let Some(i) = t.find("/*") {
-            if !t[i + 2..].contains("*/") {
-                in_block = true;
-            }
-            t = &t[..i];
-        }
-        // Cut a `//` tail.
-        if let Some(i) = t.find("//") {
-            t = &t[..i];
-        }
-        // word-boundary 'main' followed by optional spaces then '('
-        if t
-            .split_whitespace()
-            .any(|w| w.starts_with("main(") || w == "main")
-            && t.contains("(")
-        {
-            return true;
-        }
+        i = next;
     }
     false
 }
@@ -455,6 +506,27 @@ fn resolve_compile_set(sources: &[PathBuf], keep: &Path) -> (Vec<PathBuf>, usize
     }
 }
 
+/// The amber notice emitted when folder mode collapses the compile set to the
+/// active file alone. Two distinct shapes need distinct wording: the active
+/// file itself defines a main() (the usual flat folder of standalone
+/// programs) or it does not (the user opened a fragment with no main while
+/// the folder's real programs have one). In the latter the linker's
+/// "undefined _main" should read as "the active file is missing its main()",
+/// not as a mystery — so the notice says so up front.
+fn folder_collapse_notice(active_has_main: bool, sources_with_main: usize) -> String {
+    if active_has_main {
+        format!(
+            "\x1b[33m• {} main() programs in this folder — compiling the active file alone.\x1b[0m\r\n",
+            sources_with_main
+        )
+    } else {
+        format!(
+            "\x1b[33m• The active file has no main() (the other {} programs in this folder do) — only it was compiled, so expect the linker's \"undefined _main\". Add a main() to this file.\x1b[0m\r\n",
+            sources_with_main
+        )
+    }
+}
+
 /// Builds the gcc invocation. `sources` is the .c files; `workspace_dir`
 /// (folder mode only) adds `-I<dir>` so `#include "utils.h"` resolves.
 /// -std is passed as a single "-std=…" argument.
@@ -584,13 +656,15 @@ fn build(
         // mains. A real project (one main + helper .c files) counts 1
         // main and stays a set, so nothing regresses there. -I<workspace>
         // is still passed below, so #include "utils.h" resolves either way.
-        let (sources, sources_with_main) =
-            resolve_compile_set(&sources, real_file.as_deref().unwrap_or(&file_path));
+        let keep = real_file.as_deref().unwrap_or(&file_path);
+        let (sources, sources_with_main) = resolve_compile_set(&sources, keep);
         if sources.len() == 1 && sources_with_main > 1 {
-            emit(format!(
-                "\x1b[33m• {} main() programs in this folder — compiling the active file alone.\x1b[0m\r\n",
-                sources_with_main
-            ));
+            // Same compile outcome either way — only the active file is
+            // linked — but the notice must say which shape this is:
+            // normal standalone-dev folder (active HAS main) vs. the user
+            // opened an incomplete snippet (active LACKS main, and the
+            // linker's "undefined _main" is exactly that gap).
+            emit(folder_collapse_notice(has_main_def(keep), sources_with_main));
         }
     }
     let workspace_arg = folder_mode.as_ref().map(|p| p.as_path());
@@ -1049,6 +1123,75 @@ mod tests {
         }
         // Unreadable file never panics — absence of evidence is not main().
         assert!(!has_main_def(&root.join("missing.c")));
+    }
+
+    #[test]
+    fn has_main_def_detects_main_param_list_on_following_lines() {
+        // `main` and its `(` can sit on different physical lines — previously
+        // the same-line matcher required both on one line, so it silently
+        // missed these and re-opened the duplicate-_main hole. Only a `(` as
+        // the FIRST significant code char after a bare `main` counts; a
+        // preceding `;`/`=`/`[` or an identifier means `main` was a variable.
+        let cases: &[(&str, bool)] = &[
+            ("int\nmain\n(void) { return 0; }", true),
+            ("int main\n(void) { return 0; }", true),
+            ("int main\n  (int argc, char **argv) { return 0; }", true),
+            ("main\n(void) { return 0; }", true),
+            // Blank lines, // comments and `#` lines between `main` and `(` are
+            // noise — the forward scan must pass straight through them.
+            ("int main\n\n(void) { return 0; }", true),
+            ("int main\n// note\n(void) { return 0; }", true),
+            ("int main\n/* note */\n(void) { return 0; }", true),
+            ("int main\n#ifndef X\n#endif\n(void) { return 0; }", true),
+            // First significant char is not `(` → `main` is a variable, and
+            // the scan must stop, not wander on to some later `(`.
+            ("int main\n= helper();", false),
+            ("int main\n;", false),
+            ("int main\n;\nint f(void) { return 0; }", false),
+            ("int main\n_[x];", false),
+            // A `(` hiding inside an open block comment is not a parameter
+            // list and must not be reached.
+            ("int main\n/*\n(void)\n*/\nint x;", false),
+            // The single-line signatures keep working alongside the new ones.
+            ("int main(void) { return 0; }", true),
+            ("int main (int argc, char **argv) { return 0; }", true),
+        ];
+        let root = temp_dir().join("has_main_multiline_test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        for (i, (src, expected)) in cases.iter().enumerate() {
+            let f = root.join(format!("case_{}.c", i));
+            fs::write(&f, src).unwrap();
+            assert_eq!(
+                has_main_def(&f),
+                *expected,
+                "case {}: {:?}",
+                i,
+                src
+            );
+        }
+    }
+
+    #[test]
+    fn folder_collapse_notice_calls_out_active_file_lacking_main() {
+        let with_main = folder_collapse_notice(true, 4);
+        assert!(
+            with_main.contains("4 main() programs"),
+            "got: {}",
+            with_main
+        );
+        assert!(!with_main.contains("no main()"), "got: {}", with_main);
+        let without_main = folder_collapse_notice(false, 4);
+        assert!(
+            without_main.contains("has no main()"),
+            "got: {}",
+            without_main
+        );
+        assert!(
+            without_main.contains("undefined _main"),
+            "got: {}",
+            without_main
+        );
     }
 
     #[test]
